@@ -7,6 +7,16 @@ description: compass-app-jasper / compass-core / fenghe-nn 三个仓库的测试
 
 三个仓库的测试运行方式。运行前先读 `.kiro/local-context.sh` 取 `CONDA_ENV` 等机器相关变量（见 `50-project-facts.md#local-context`），命令自带 `conda run -n $CONDA_ENV` 前缀，不依赖预先注入的环境。
 
+## 长测试挂后台运行并监控
+
+下列命令模板是前台执行，仅适用于短测试。预计长时间运行的测试必须挂后台，否则前台执行会因 shell 输出缓冲一直阻塞到测试结束。用通用后台脚本 `run_exp/bg.sh <workdir> <命令...>` 把测试命令挂后台（脚本负责后台化、日志写 `<workdir>/run.log`、PID 写 `<workdir>/run.pid`），再用 `run_exp/wait.sh <PID> [标志文件]` 阻塞等待其真正结束（wait.sh 带 PID 存活检查，进程被 kill 也能正确退出）。运行期间看进展用 `tail`/`grep` 读一次日志，不用 `tail -f`。
+
+```bash
+mkdir -p ~/data/test/<test-run-dir>
+bash ~/data/my-kiro-cli/run_exp/bg.sh ~/data/test/<test-run-dir> <完整测试命令，如 conda run -n $CONDA_ENV python -m pytest ...>
+bash ~/data/my-kiro-cli/run_exp/wait.sh "$(cat ~/data/test/<test-run-dir>/run.pid)"
+```
+
 ## 测试框架不可按目录预判
 
 jasper 仓库内 unittest（继承 `unittest.TestCase`）和 pytest（普通函数 + `assert`/pytest fixture）风格的测试文件都可能存在，不能按目录或仓库预判框架。执行前先打开目标脚本确认写法，再选用对应命令模板。
