@@ -1,0 +1,8 @@
+#!/bin/bash
+# 本机配置模板。复制为 .kiro/local-context.sh 并按本机实际值修改。
+# local-context.sh 不纳入版本控制（见 .gitignore）。
+# 用途：集中定义机器相关变量，实验/测试命令运行前读取，避免硬编码。
+# 见 .kiro/steering/50-project-facts.md#local-context。
+
+# conda 环境名
+CONDA_ENV=<your-conda-env-name>

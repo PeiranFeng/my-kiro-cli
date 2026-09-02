@@ -1,0 +1,2 @@
+# 本机配置，每台机器自建，不纳入版本控制（模板见 .kiro/local-context.sh.example）
+.kiro/local-context.sh
