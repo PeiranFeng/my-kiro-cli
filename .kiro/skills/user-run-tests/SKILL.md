@@ -7,14 +7,19 @@ description: compass-app-jasper / compass-core / fenghe-nn 三个仓库的测试
 
 三个仓库的测试运行方式。运行前先读 `.kiro/local-context.sh` 取 `CONDA_ENV` 等机器相关变量（见 `50-project-facts.md#local-context`），命令自带 `conda run -n $CONDA_ENV` 前缀，不依赖预先注入的环境。
 
-## 长测试挂后台运行并监控
+## 长测试挂后台运行
 
-下列命令模板是前台执行，仅适用于短测试。预计长时间运行的测试必须挂后台，否则前台执行会因 shell 输出缓冲一直阻塞到测试结束。用通用后台脚本 `run_exp/bg.sh <workdir> <命令...>` 把测试命令挂后台（脚本负责后台化、日志写 `<workdir>/run.log`、PID 写 `<workdir>/run.pid`），再用 `run_exp/wait.sh <PID> [标志文件]` 阻塞等待其真正结束（wait.sh 带 PID 存活检查，进程被 kill 也能正确退出）。运行期间看进展用 `tail`/`grep` 读一次日志，不用 `tail -f`。
+下列命令模板是前台执行，仅适用于短测试。预计长时间运行的测试必须挂后台，否则前台执行会因 shell 输出缓冲一直阻塞到测试结束。用通用后台脚本 `run_exp/bg.sh <workdir> <命令...>` 把测试命令挂后台（脚本负责后台化、日志写 `<workdir>/run.log`、PID 写 `<workdir>/run.pid`），启动即返回、不占会话：
 
 ```bash
 mkdir -p ~/data/test/<test-run-dir>
 bash ~/data/my-kiro-cli/run_exp/bg.sh ~/data/test/<test-run-dir> <完整测试命令，如 conda run -n $CONDA_ENV python -m pytest ...>
-bash ~/data/my-kiro-cli/run_exp/wait.sh "$(cat ~/data/test/<test-run-dir>/run.pid)"
+```
+
+Kiro 无后台任务完成通知机制，不写脚本阻塞等待（等价于前台运行）。查是否结束用主动探测，瞬间返回、不占会话；何时探测由用户下一轮交互驱动；看结果读 `run.log`：
+
+```bash
+kill -0 "$(cat ~/data/test/<test-run-dir>/run.pid)" 2>/dev/null && echo running || echo finished
 ```
 
 ## 测试框架不可按目录预判

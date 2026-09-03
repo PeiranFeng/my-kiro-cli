@@ -22,15 +22,15 @@ conda run -n $CONDA_ENV --no-capture-output bash ~/data/my-kiro-cli/run_exp/run.
 
 OVERRIDE 中每个参数必须确认存在于 `conf/` 下的 yaml，且使用从对应 config group 顶层开始的完整 Hydra 路径，不省略中间层级。seed 覆盖时该 key 已存在于配置中，直接赋值，不加 `+` 前缀（`+` 用于新增不存在的 key，加在已存在的 key 上会报重复 key 错误）。
 
-## 监控实验
+## 查看实验状态
 
-训练实验启动后立即监控。用封装脚本 `run_exp/wait.sh` 等待后台进程：
+Kiro 无后台任务完成通知机制：任务结束不会主动告知 agent，也没有可对标 Claude Code monitor 的工具。判断"是否结束"只能主动探测，不要写脚本阻塞等待（阻塞等待等价于前台运行，失去后台的意义）：
 
 ```bash
-bash ~/data/my-kiro-cli/run_exp/wait.sh <PID> [完成标志文件]
+kill -0 "$(cat ~/data/test/<exp-dir>/run.pid)" 2>/dev/null && echo running || echo finished
 ```
 
-退出条件必须同时覆盖"完成标志出现"和"进程已死"——进程被 OOM kill 或信号终止时不会写 log 或标志文件，单靠 log/标志匹配会永远不退出，故脚本带 PID 存活检查。轮询循环封装在脚本内。
+这条命令瞬间返回、不占会话。何时探测由用户下一轮交互驱动。看结果读 `run.log`。进程被 OOM kill 或信号终止时不写 log 或标志文件，故判断结束以 `kill -0`（进程存活检查）为准，不靠 log/标志匹配。
 
 ## 停止实验
 
