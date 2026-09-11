@@ -1,6 +1,6 @@
 ---
 name: user-run-tests
-description: compass-app-jasper / compass-core / fenghe-nn 三个仓库的测试运行命令模板与测试框架判定规则。当用户要求跑测试、验证代码改动时使用。
+description: compass-app-jasper / compass-core（含并入其中的 fenghe-nn）的测试运行命令模板与测试框架判定规则。当用户要求跑测试、验证代码改动时使用。
 ---
 
 # user-run-tests
@@ -33,15 +33,17 @@ cd ~/data/compass-core
 env CUBLAS_WORKSPACE_CONFIG=:4096:8 conda run -n $CONDA_ENV python -m pytest test/
 ```
 
-## fenghe-nn
+## fenghe-nn（在 compass-core 内）
+
+fenghe-nn 的代码与测试已并入 compass-core：`lib/fenghe-nn/python` 与 `test/fenghe-nn`。C++/Triton 扩展按需编译，无需 pip install：
 
 ```bash
-cd ~/data/fenghe-nn/python
-pip install -e .   # 安装（含 C++ 扩展编译）
-conda run -n $CONDA_ENV pytest test/
+cd ~/data/compass-core
+env CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=lib/fenghe-nn/python \
+  conda run -n $CONDA_ENV python -m pytest test/fenghe-nn
 ```
 
-Python 包名 `finai`，import 路径 `from fenghe.xxx import ...`。
+import 路径 `from fenghe.xxx import ...`。单卡显存不足需排除的用例与编译相关环境变量见 core 的 `.github/workflows/nightly-fenghe-nn-check.yaml`。
 
 ## compass-app-jasper
 
@@ -49,7 +51,7 @@ pytest 风格：
 
 ```bash
 cd ~/data/compass-app-jasper
-env PYTHONSAFEPATH=1 PYTHONPATH=$PWD/core:$PWD/app2:$PWD/lib:$PWD/lib2/python \
+env PYTHONSAFEPATH=1 PYTHONPATH=$PWD/core:$PWD/app2:$PWD/lib:$PWD/core/lib/fenghe-nn/python \
   conda run -n $CONDA_ENV python -m pytest <test_file_or_dir> -v
 ```
 
@@ -57,11 +59,11 @@ unittest 风格：统一直接执行脚本文件，不用 `unittest discover`—
 
 ```bash
 cd <测试文件所在目录>
-env PYTHONSAFEPATH=1 PYTHONPATH=$HOME/data/compass-app-jasper/core:$HOME/data/compass-app-jasper/app2:$HOME/data/compass-app-jasper/lib:$HOME/data/compass-app-jasper/lib2/python \
+env PYTHONSAFEPATH=1 PYTHONPATH=$HOME/data/compass-app-jasper/core:$HOME/data/compass-app-jasper/app2:$HOME/data/compass-app-jasper/lib:$HOME/data/compass-app-jasper/core/lib/fenghe-nn/python \
   conda run -n $CONDA_ENV python <测试文件名>.py -v
 ```
 
 ## 注意事项
 
-- `fenghe` 是命名空间包，`lib/fenghe/` 和 `lib2/python/fenghe/` 合并；unittest 不执行 conftest，需手动在 PYTHONPATH 包含两个路径。
+- `fenghe` 是命名空间包，`lib/fenghe/` 和 `core/lib/fenghe-nn/python/fenghe/` 合并；unittest 不执行 conftest，需手动在 PYTHONPATH 包含两个路径。
 - tensor 相关测试必须跑在 GPU 环境（见 `30-domain-gpu.md#test-on-gpu`）。

@@ -1,30 +1,30 @@
 ---
 name: user-update-submodule
-description: compass-app-jasper 与其 submodule（compass-core / fenghe-nn）的联合开发流程，包括正常功能开发与临时 debug 修改的规范。当用户要求更新 submodule 指针、在 core/lib2 下开发或提交 submodule 相关改动时使用。
+description: compass-app-jasper 与其 submodule（compass-core）的联合开发流程，包括正常功能开发与临时 debug 修改的规范。当用户要求更新 submodule 指针、在 core 下开发或提交 submodule 相关改动时使用。
 ---
 
 # user-update-submodule
 
-`compass-app-jasper/core/` 和 `compass-app-jasper/lib2/` 是 submodule，源仓库分别是 `compass-core`、`fenghe-nn`（见 `50-project-facts.md#repos`）。
+`compass-app-jasper/core/` 是 submodule，源仓库是 `compass-core`（见 `50-project-facts.md#repos`）。
 
 ## 正常功能开发流程
 
-1. 在源仓库（`~/data/compass-core` 或 `~/data/fenghe-nn`）开发、提交、推送。
+1. 在源仓库（`~/data/compass-core`）开发、提交、推送。
 2. 在主仓库更新 submodule 指针：
 
    ```bash
-   cd ~/data/compass-app-jasper/core   # 或 lib2/
+   cd ~/data/compass-app-jasper/core
    git checkout <新 commit hash 或分支>
    cd ~/data/compass-app-jasper
-   git add core lib2
+   git add core
    git commit -m "update submodule: ..."
    ```
 
-禁止在 jasper 的 `core/` 或 `lib2/` 子目录下直接提交功能修改。
+禁止在 jasper 的 `core/` 子目录下直接提交功能修改。
 
 ## Debug / 临时修改
 
-- 可以在 `compass-app-jasper/core/` 或 `compass-app-jasper/lib2/` 内直接改代码。
+- 可以在 `compass-app-jasper/core/` 内直接改代码。
 - 禁止将这类修改 push 到远程。
 - 若验证有效，须回到源仓库重新提交，再走正常流程更新指针。
 
