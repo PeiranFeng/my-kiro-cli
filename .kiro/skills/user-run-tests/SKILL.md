@@ -33,16 +33,6 @@ cd ~/data/compass-core
 env CUBLAS_WORKSPACE_CONFIG=:4096:8 conda run -n $CONDA_ENV python -m pytest test/
 ```
 
-## fenghe-nn
-
-```bash
-cd ~/data/fenghe-nn/python
-pip install -e .   # 安装（含 C++ 扩展编译）
-conda run -n $CONDA_ENV pytest test/
-```
-
-Python 包名 `finai`，import 路径 `from fenghe.xxx import ...`。
-
 ## compass-app-jasper
 
 pytest 风格：
