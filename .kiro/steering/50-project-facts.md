@@ -6,20 +6,20 @@ inclusion: always
 
 ## 项目概述  {#overview}
 
-这个控制台目录（`~/data/my-kiro-cli`）存放 Kiro 配置（steering、skills），用于操控 `~/data` 下的多个项目仓库。`compass-app-jasper` 是量化研究平台主仓库，`compass-core`、`fenghe-nn` 是它的两个 submodule 的源仓库，三者共用本控制台的配置。
+这个控制台目录（`~/data/my-kiro-cli`）存放 Kiro 配置（steering、skills），用于操控 `~/data` 下的多个项目仓库。`compass-app-jasper` 是量化研究平台主仓库，`compass-core` 是它唯一 submodule 的源仓库，两者共用本控制台的配置。fenghe-nn 的代码已并入 `compass-core` 的 `lib/fenghe-nn`。
 
 ## 仓库关系  {#repos}
 
 | 仓库路径 | 角色 | 主分支 |
 |---------|------|--------|
-| `~/data/compass-app-jasper` | 主仓库（量化研究平台），含两个 submodule | — |
-| `~/data/compass-core` | submodule `core/` 的源仓库（底层数值运算） | `develop` |
-| `~/data/fenghe-nn` | submodule `lib2/` 的源仓库（GPU 内核 / PyTorch 绑定） | `develop` |
+| `~/data/compass-app-jasper` | 主仓库（量化研究平台），含一个 submodule `core/` | — |
+| `~/data/compass-core` | submodule `core/` 的源仓库（底层数值运算，含 `lib/fenghe-nn` 的 GPU 内核 / PyTorch 绑定） | `develop` |
+| `~/data/fenghe-nn` | 历史独立仓库，代码已并入 `compass-core`，不再作为开发入口 | `develop` |
 | `~/data/test/` | 临时实验输出目录 | — |
 | `~/data/exp/` | 持久化实验输出目录 | — |
 | `~/data/review/<repo>/<branch>/` | review 输出目录，按仓库+分支分类，避免同名冲突 | — |
 
-`compass-app-jasper/core/` 和 `compass-app-jasper/lib2/` 是 submodule，分别对应 `compass-core` 和 `fenghe-nn`，在 jasper 中是 detached HEAD 状态，`git checkout` 到具体 commit 才生效。submodule 联合开发流程见 `user-update-submodule` skill。
+`compass-app-jasper/core/` 是 submodule，对应 `compass-core`，在 jasper 中是 detached HEAD 状态，`git checkout` 到具体 commit 才生效。submodule 联合开发流程见 `user-update-submodule` skill。
 
 ## 架构约束  {#architecture-constraints}
 
