@@ -6,3 +6,6 @@
 
 # conda 环境名
 CONDA_ENV=<your-conda-env-name>
+
+# snow CLI 连接名（定义见 ~/.config/snowflake/config.toml）
+SNOWFLAKE_CONNECTION=<your-snow-connection-name>
