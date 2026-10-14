@@ -5,14 +5,14 @@ description: 拉取指定仓库和时间范围内的 GitHub PR，阅读源码做
 
 # user-pr — GitHub Pull Request 分析归档
 
-拉取 PR、阅读源码、做独立分析并按固定格式归档。所有 gh 命令针对组织 `FinAI-Project` 下的三个仓库（见 `50-project-facts.md#repos`）。
+拉取 PR、阅读源码、做独立分析并按固定格式归档。所有 gh 命令针对组织 `FinAI-Project` 下的仓库（列表见 `50-project-facts.md#repos`）。
 
 ## Step 1 — 确认参数
 
 优先从用户指令和对话上下文推断参数，不铺选项询问（见 `00-collaboration.md#answer-dont-offer-options`）。
 
 - 模式 A：用户直接给了 PR 编号列表（如 `#210 #211` 或 `210,211`）及仓库，则跳过其他条件，直接以该列表为目标进入 Step 2。
-- 模式 B：未给编号列表，读取以下筛选参数——仓库（`compass-app-jasper`/`compass-core`/`fenghe-nn`，可多选，默认全部三个）、时间范围（默认最近 7 天）、发布者 author（默认不限制）。这些参数有默认值，直接采用默认继续，仅当某个关键前提无法推断且会改变结果时才直接问一句。
+- 模式 B：未给编号列表，读取以下筛选参数——仓库（用户未指定时须询问具体是哪个仓库，不默认处理全部）、时间范围（默认最近 7 天）、发布者 author（默认不限制）。时间范围与 author 有默认值可直接采用，仓库这一项无法推断时必须直接问。
 
 ## Step 2 — 拉取 PR 列表
 

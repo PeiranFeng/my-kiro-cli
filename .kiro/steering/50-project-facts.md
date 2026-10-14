@@ -15,8 +15,8 @@ inclusion: always
 | `~/data/compass-app-jasper` | 主仓库（量化研究平台），含一个 submodule `core/` | — |
 | `~/data/compass-core` | submodule `core/` 的源仓库（底层数值运算，含 `lib/fenghe-nn` 的 GPU 内核 / PyTorch 绑定） | `develop` |
 | `~/data/fenghe-nn` | 历史独立仓库，代码已并入 `compass-core`，不再作为开发入口 | `develop` |
-| `~/data/feature-lab` | 独立仓库（`FinAI-Project/feature-lab`） | `dev` |
-| `~/data/preprocess_evaluate` | 独立仓库（`FinAI-Project/preprocess_evaluate`），含两个 submodule：`extern/fenghe`（源 `fenghe-nn`）、`extern/core`（源 `compass-core`） | — |
+| `~/data/feature-lab` | 独立仓库（`FinAI-Project/feature-lab`），dbt (Snowflake) 项目，承担 Snowflake 侧的 model/test/hook/schema：RAW/STAGING/MARTS 分层建模股票参考、行情、基本面数据，`models/preprocess/` 下定义因子预处理四阶段模型（fill/normalize × cross-section/timing）与增量写入边界，`analyses/create_preprocess_procedure.sql` 创建调用 `preprocess_evaluate` 代码的存储过程 `FEATURELAB.PUBLIC.PREPROCESS_FACTORS` | `dev` |
+| `~/data/preprocess_evaluate` | 独立仓库（`FinAI-Project/preprocess_evaluate`），含两个 submodule：`extern/fenghe`（源 `fenghe-nn`）、`extern/core`（源 `compass-core`）。提供因子预处理与评估的计算代码，有两条独立路径：本地路径由 `main.py`（Hydra 入口）驱动 `lib/_PreprocessingJob_.py` 对 Parquet 文件做因子处理与归一化（`lib/processor/`）；Snowflake 路径由 `snowflake_preprocess.py` 的存储过程入口 `mart_handler`（Snowpark）提供，供 `feature-lab` 的 dbt 模型调用，`orchestration.py` 负责按 rule 调用与增量边界。`scripts/build_bundle.py` 打包部署用 zip，上传路径与存储过程确认流程见 `docs/snowflake_preprocess.md`（完整数据流与数学说明见 `feature-lab` 仓库同名文档） | — |
 | `~/data/test/` | 临时实验输出目录 | — |
 | `~/data/exp/` | 持久化实验输出目录 | — |
 | `~/data/review/<repo>/<branch>/` | review 输出目录，按仓库+分支分类，避免同名冲突 | — |
