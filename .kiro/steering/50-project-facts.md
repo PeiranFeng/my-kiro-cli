@@ -16,7 +16,7 @@ inclusion: always
 | `~/data/compass-core` | submodule `core/` 的源仓库（底层数值运算，含 `lib/fenghe-nn` 的 GPU 内核 / PyTorch 绑定） | `develop` |
 | `~/data/fenghe-nn` | 历史独立仓库，代码已并入 `compass-core`，不再作为开发入口 | `develop` |
 | `~/data/feature-lab` | 独立仓库（`FinAI-Project/feature-lab`），dbt (Snowflake) 项目，承担 Snowflake 侧的 model/test/hook/schema：RAW/STAGING/MARTS 分层建模股票参考、行情、基本面数据，`models/preprocess/` 下定义因子预处理四阶段模型（fill/normalize × cross-section/timing）与增量写入边界，`analyses/create_preprocess_procedure.sql` 创建调用 `preprocess_evaluate` 代码的存储过程 `FEATURELAB.PUBLIC.PREPROCESS_FACTORS` | `dev` |
-| `~/data/preprocess_evaluate` | 独立仓库（`FinAI-Project/preprocess_evaluate`），含两个 submodule：`extern/fenghe`（源 `fenghe-nn`）、`extern/core`（源 `compass-core`）。提供因子预处理与评估的计算代码，有两条独立路径：本地路径由 `main.py`（Hydra 入口）驱动 `lib/_PreprocessingJob_.py` 对 Parquet 文件做因子处理与归一化（`lib/processor/`）；Snowflake 路径由 `snowflake_preprocess.py` 的存储过程入口 `mart_handler`（Snowpark）提供，供 `feature-lab` 的 dbt 模型调用，`orchestration.py` 负责按 rule 调用与增量边界。`scripts/build_bundle.py` 打包部署用 zip，上传路径与存储过程确认流程见 `docs/snowflake_preprocess.md`（完整数据流与数学说明见 `feature-lab` 仓库同名文档） | — |
+| `~/data/preprocess_evaluate` | 独立仓库（`FinAI-Project/preprocess_evaluate`），含两个 submodule：`extern/fenghe`（源 `fenghe-nn`）、`extern/core`（源 `compass-core`）。提供因子预处理与评估的计算代码，有两条独立路径：本地路径由 `main.py`（Hydra 入口）驱动 `lib/_PreprocessingJob_.py` 对 Parquet 文件做因子处理与归一化（`lib/processor/`）；Snowflake 路径由 `snowflake_preprocess.py` 的存储过程入口 `mart_handler`（Snowpark）提供，供 `feature-lab` 的 dbt 模型调用，`orchestration.py` 负责按 rule 调用与增量边界。`scripts/build_bundle.py` 打包部署用 zip，上传路径与存储过程确认流程见 `docs/snowflake_preprocess.md`（完整数据流与数学说明见 `feature-lab` 仓库同名文档）。本地测试（含 `test/snowpark/` 下依赖 `snowflake.snowpark` 的用例）的 conda 环境名见 `.kiro/local-context.sh` 的 `CONDA_ENV_SNOWFLAKE`，与 jasper 等原有仓库用的 `CONDA_ENV` 是两个不同环境 | — |
 | `~/data/test/` | 临时实验输出目录 | — |
 | `~/data/exp/` | 持久化实验输出目录 | — |
 | `~/data/review/<repo>/<branch>/` | review 输出目录，按仓库+分支分类，避免同名冲突 | — |
@@ -45,7 +45,7 @@ inclusion: always
 
 ### 入口只有 snow CLI  {#snow-cli-only}
 
-`snow`（Snowflake CLI）由 `uv tool` 独立安装，位于 conda 之外；各 conda 环境均未安装 `snowflake-connector-python` 与 `snowflake-snowpark-python`。因此查询、建表、传文件一律用 `snow sql` / `snow stage` 子命令，不写 Python 客户端脚本，也不给 `snow` 加 `conda run` 前缀。
+`snow`（Snowflake CLI）由 `uv tool` 独立安装，位于 conda 之外。人工查询、建表、传文件一律用 `snow sql` / `snow stage` 子命令，不写 Python 客户端脚本，也不给 `snow` 加 `conda run` 前缀——`preprocess_evaluate` 本地测试用到的 `snowflake-connector-python`/`snowflake-snowpark-python`（`.kiro/local-context.sh` 的 `CONDA_ENV_SNOWFLAKE` 环境）是该仓库测试代码的依赖，不改变这条访问入口的选择。
 
 ### 连接定义在本机 config.toml  {#snow-config}
 

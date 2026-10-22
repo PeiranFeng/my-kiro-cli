@@ -7,5 +7,8 @@
 # conda 环境名
 CONDA_ENV=<your-conda-env-name>
 
+# preprocess_evaluate 本地 Snowflake 相关测试（snowflake.snowpark 等）的 conda 环境名
+CONDA_ENV_SNOWFLAKE=<your-conda-env-name>
+
 # snow CLI 连接名（定义见 ~/.config/snowflake/config.toml）
 SNOWFLAKE_CONNECTION=<your-snow-connection-name>
