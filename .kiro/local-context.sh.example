@@ -12,3 +12,8 @@ CONDA_ENV_SNOWFLAKE=<your-conda-env-name>
 
 # snow CLI 连接名（定义见 ~/.config/snowflake/config.toml）
 SNOWFLAKE_CONNECTION=<your-snow-connection-name>
+
+# dbt 本机 CLI 连接 Snowflake 用（feature-lab 仓库 profiles.yml 的 env_var()，与上面的 snow CLI 连接是两套独立凭据）
+SNOWFLAKE_ACCOUNT=<your-snowflake-account-identifier>
+SNOWFLAKE_USER=<your-snowflake-username>
+SNOWFLAKE_PASSWORD=<your-snowflake-password>

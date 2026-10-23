@@ -39,7 +39,9 @@ inclusion: always
 
 ## 本机配置  {#local-context}
 
-机器相关配置（conda 环境名、路径等）集中在本机文件 `.kiro/local-context.sh`，该文件不纳入版本控制（每台机器自建，模板见 `.kiro/local-context.sh.example`）。执行任何实验或测试前先读取该文件确认变量值，禁止把机器相关值硬编码进 steering、skill 或命令。命令自带环境激活前缀（如 `conda run -n $CONDA_ENV ...`），不依赖预先注入的环境。具体用法见 `user-run-experiment`、`user-run-tests` skill。
+机器相关配置（conda 环境名、路径、密钥等）集中在本机文件 `.kiro/local-context.sh`，该文件不纳入版本控制（每台机器自建，模板见 `.kiro/local-context.sh.example`）。**这是用户指定的、设置环境变量的唯一方式**——不使用 agent hook（如 `agentSpawn`）或其它会话级自动注入机制设置环境变量，理由是 hook 的输出会进入对话上下文，密钥类变量因此会被持久化进会话历史，不符合密钥不可复述进对话的约束。
+
+执行任何实验或测试前先读取该文件确认变量值，禁止把机器相关值硬编码进 steering、skill 或命令。两种接入方式按场景选择：大多数命令自带环境激活前缀（如 `conda run -n $CONDA_ENV ...`），从该文件读出的值当作参数拼进命令（如 `-c "$SNOWFLAKE_CONNECTION"`），不依赖预先注入的进程环境；但依赖进程环境变量本身存在的场景（如 `feature-lab` 仓库 `profiles.yml` 的 `env_var('SNOWFLAKE_USER', ...)`，dbt 只认运行时环境变量、不接受命令行传参）必须显式 `source .kiro/local-context.sh` 到执行命令的 shell 里，此时该文件内的变量名需与目标程序期望的环境变量名一致（如 `SNOWFLAKE_ACCOUNT`/`SNOWFLAKE_USER`/`SNOWFLAKE_PASSWORD`）。具体用法见 `user-run-experiment`、`user-run-tests`、`user-snowflake` skill。
 
 ## Snowflake 访问  {#snowflake}
 
@@ -57,11 +59,9 @@ inclusion: always
 
 ### preprocess_evaluate 的部署 stage  {#preprocess-evaluate-stage}
 
-`preprocess_evaluate` 打包后的 zip（`scripts/build_bundle.py` 产出）实际被引用的位置是 `FEATURELAB.PUBLIC.FEATURE_LAB_PYTHON_STAGE`（`feature-lab` 仓库 `models/preprocess/*.py` 的 `imports=` 字段引用该路径下的 `preprocess_evaluate.zip`，具体列表以仓库代码为准）。个人工作区下同名/近似命名的 stage（如 `DEV_PEIRAN.STG_CODE`）与之无关，只是个人测试副本，排查部署版本时不要与之混淆。stage 不区分 git 分支，且该 stage 上的文件名是否带 commit 短 hash 后缀当前不一致（同时存在带后缀与不带后缀的版本），文件名或 `LIST` 的 `last_modified` 都不可作为版本依据，必须下载后与目标 commit 做 `git archive` 逐文件内容比对才能确认对应关系。
+`preprocess_evaluate` 打包后的 zip（`scripts/build_bundle.py` 产出）引用位置是 `FEATURELAB.PUBLIC.FEATURE_LAB_PYTHON_STAGE`（`feature-lab` 仓库 `models/preprocess/*.py` 的 `imports=` 字段引用该路径下的 `preprocess_evaluate.zip`）。该仓库 `.github/workflows/snowflake-upload.yaml` 已接入 CI，push 到 `main`/`develop` 时自动打包上传到这个共享路径；**正式开发和生产环境已禁止手动上传到这个共享路径**，更新只能通过 push 触发 CI。个人在自己 `DEV_<name>` schema 下的 `PYTHON_STAGE` 手动上传 zip 不受此限制，相关操作规范见 `user-snowflake` skill 的 `python-stage-upload.md`。
 
 `DEV_PREPROCESS` schema 存放的是 dbt 构建出的 mart 层表/视图（`fact_stock_factor_*`、`fact_pool_weight_source` 等，定义见 `feature-lab` 仓库 `models/preprocess/`），不存放 zip，与上述 stage 是两个不相关的对象。
-
-该 stage 上 zip 的命名习惯当前不统一：同时存在不带后缀的 `preprocess_evaluate.zip`（`imports=` 实际引用的文件名）和带 commit 短 hash 后缀的 `preprocess_evaluate-<短hash>.zip`（后者是 `scripts/build_bundle.py` 一度加入又移除的命名尝试遗留，见该脚本的 git 历史），无后缀版本不代表旧版本，需按上一条的内容比对方法确认。
 
 ### 密钥对认证当前不可用  {#snow-jwt-unavailable}
 
