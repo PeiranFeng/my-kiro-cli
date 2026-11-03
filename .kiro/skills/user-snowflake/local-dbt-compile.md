@@ -43,3 +43,14 @@ uv run dbt build --target personal ...
 这套凭据机制不是 `personal` target 专属——`profiles.yml` 的 `dev`/`prod` target 同样读 `SNOWFLAKE_ACCOUNT`/`SNOWFLAKE_USER`/`SNOWFLAKE_PASSWORD`，但个人角色（`FEATURELAB_PERSONAL_<USER>`）通常没有被授予 `FEATURELAB_DEV`/`FEATURELAB_PROD` 这两个 role，**不要用 `--target dev`/`--target prod` 执行任何会触发真实 Snowflake 连接的命令**（`dbt debug`、`dbt build`、`dbt run`、`dbt test` 等）——连接会在权限校验阶段被拒绝，而且这类尝试本身就不该发生：改 `DEV`/`PROD` schema 的数据只能通过 CI/CD 走审批流程（见 `snowflake-guide.md` 的 access control 章节），不是本地个人可以绕过的操作。
 
 `dbt parse` 是例外，纯本地解析 Jinja/YAML/依赖图，不连接 Snowflake、不需要任何角色权限，`--target` 只是选用哪个 target 的变量值做编译，不代表会用该 target 的身份登录（见 `personal-schema-testing.md` 的 manifest 获取方法，用的正是 `dbt parse --target prod`）。只有 `dbt parse` 可以安全地指定 `--target prod`，其余 dbt 子命令一律只用 `--target personal`。
+
+
+## 长时 Python dbt 构建的中断与恢复
+
+Python model 的 `dbt build` 会提交 Snowflake 存储过程调用。dbt 在该调用返回前不会写入最终 `run_results.json`，日志也可能长时间停留在连接或调用行，因此日志静默、找不到本地 dbt 进程、或没有最终结果文件都只表示本地调用未完成，不能据此判定远程执行失败或卡死。
+
+自动化任务、终端或本地 dbt 进程中断不会保证取消已提交的 Snowflake 查询。中断后恢复时，先通过 `snow sql` 的 `QUERY_HISTORY_BY_USER` 查询目标 model 或 procedure 的近期记录，核对 `QUERY_ID`、`USER_NAME`、`ROLE_NAME`、`EXECUTION_STATUS`、开始时间、结束时间和错误信息；不要直接重跑。
+
+同一目标仍有 `RUNNING` 查询时，不启动第二次 `dbt build`。持续只读轮询该查询直到它进入终态，再从 `run_results.json` 或 Snowflake 查询历史判断成功或失败。历史运行时长只可用于安排观察，不可作为自动取消、重跑或判定卡死的阈值。
+
+取消查询会影响 Snowflake 上仍在执行的工作。自动化任务不得自行取消查询，必须先向用户展示待取消的完整 `QUERY_ID`、提交用户和角色，并取得明确确认。
