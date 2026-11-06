@@ -14,6 +14,7 @@ description: Snowflake CLI 查询与 stage 操作，以及 FeatureLab dbt、个�
 - 本地编译或执行 dbt：读取 [local-dbt-compile.md](local-dbt-compile.md)。
 - 个人 `PYTHON_STAGE` 上传 zip 或确认 zip 对应 commit：读取 [python-stage-upload.md](python-stage-upload.md)。
 - preprocess 因子 source、物化 schema、上游 relation 或因子列数：读取 [preprocess-factor-lineage.md](preprocess-factor-lineage.md)。
+- DEV/PROD 线上 build 或部署报错调查：读取 [production-bug-investigation.md](production-bug-investigation.md)。
 - 新增因子接入：只调整 `models/preprocess/fact_stock_factor_source.sql`，将新的因子表 join 到该 source；该 source 汇总标准化处理前的所有原始因子。
 
 ## 连接名
