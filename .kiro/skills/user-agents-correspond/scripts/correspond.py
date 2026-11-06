@@ -132,7 +132,7 @@ def state_path(root: Path, work_id: str) -> Path:
 
 def validate_state(state: dict[str, Any], work_id: str) -> None:
     required = {"schema", "work_id", "repo", "issue", "pr", "sub_worker", "user_requirement", "updated_at_utc", "lifecycle", "last_read_file", "accepted_files", "progress"}
-    if state.get("schema") != STATE_SCHEMA or set(state) != required or state.get("work_id") != work_id:
+    if state.get("schema") != STATE_SCHEMA or not required <= set(state) or state.get("work_id") != work_id:
         fail("state schema or fields are invalid")
     repo, issue, pr, worker = split_work_id(work_id)
     if repo_name(str(state["repo"])) != repo or state["issue"] != issue or state["pr"] != pr or state["sub_worker"] != worker:
@@ -246,7 +246,7 @@ def acknowledgement_matches(root: Path, local: str, message: dict[str, Any], bod
     return request.get("action") == "request" and request.get("work_id") == local and request.get("target_work_id") == message["work_id"] and request.get("requested_acknowledgement_from_work_id") == message["work_id"] and request.get("requested_acknowledgement") == body
 
 
-def receive(arguments: argparse.Namespace) -> None:
+def watch(arguments: argparse.Namespace) -> None:
     root = Path(arguments.correspondence_dir).resolve()
     _, state = load_state(root, arguments.work_id)
     accepted_files = set(state["accepted_files"]) | set(arguments.accepted_file)
@@ -276,9 +276,14 @@ def receive(arguments: argparse.Namespace) -> None:
                 continue
             if message["action"] == "acknowledgement" and not acknowledgement_matches(root, arguments.work_id, message, body):
                 continue
-            events.append({"filename": path.name, "action": message["action"], "source_work_id": message["work_id"], "target_work_id": message["target_work_id"], "body": body})
+            event = {"filename": path.name, "action": message["action"], "source_work_id": message["work_id"], "target_work_id": message["target_work_id"], "body": body}
+            if message["action"] == "request":
+                event["requested_acknowledgement_from_work_id"] = message["requested_acknowledgement_from_work_id"]
+                event["requested_acknowledgement"] = message["requested_acknowledgement"]
+            events.append(event)
         if has_read_message or time.monotonic() >= deadline:
-            print(json.dumps({"cursor": cursor, "events": events}, ensure_ascii=False))
+            work = {"user_requirement": state["user_requirement"], "progress": state["progress"]}
+            print(json.dumps({"cursor": cursor, "work": work, "events": events}, ensure_ascii=False))
             return
         time.sleep(min(POLL_INTERVAL_SECONDS, max(0, deadline - time.monotonic())))
 
@@ -302,12 +307,12 @@ def parser() -> argparse.ArgumentParser:
     broadcast.add_argument("--requested-acknowledgement")
     broadcast.add_argument("--in-reply-to")
     broadcast.set_defaults(handler=publish)
-    receiver = commands.add_parser("receive")
-    receiver.add_argument("--work-id", required=True)
-    receiver.add_argument("--cursor")
-    receiver.add_argument("--accepted-file", action="append", default=[])
-    receiver.add_argument("--timeout-seconds", type=float, default=POLL_INTERVAL_SECONDS)
-    receiver.set_defaults(handler=receive)
+    watcher = commands.add_parser("watch")
+    watcher.add_argument("--work-id", required=True)
+    watcher.add_argument("--cursor")
+    watcher.add_argument("--accepted-file", action="append", default=[])
+    watcher.add_argument("--timeout-seconds", type=float, default=POLL_INTERVAL_SECONDS)
+    watcher.set_defaults(handler=watch)
     return result
 
 
