@@ -86,4 +86,32 @@ class TestProtocol(unittest.TestCase):
         result = self.run_helper("archive", "--work-id", "repo-_-_-1", check=False)
         self.assertEqual(result.returncode, 2); self.assertEqual(archived.read_bytes(), archived_before); self.assertEqual(active.read_bytes(), active_before)
 
+    def request(self, source, target):
+        self.body.write_text("please acknowledge")
+        return Path(self.run_helper("broadcast", "--work-id", source, "--source-agent", "agent", "--target-work-id", target, "--action", "request", "--body-file", str(self.body), "--requested-acknowledgement-from-work-id", target, "--requested-acknowledgement", f"{target} received").stdout.strip()).name
+
+    def test_receipt_reaches_requester_with_receiver_progress(self):
+        self.work("repo-_-_-1"); self.work("repo-_-_-2")
+        request = self.request("repo-_-_-1", "repo-_-_-2")
+        self.run_helper("broadcast", "--work-id", "repo-_-_-2", "--source-agent", "watch", "--target-work-id", "repo-_-_-1", "--action", "receipt", "--in-reply-to", request)
+        output = json.loads(self.run_helper("watch", "--work-id", "repo-_-_-1", "--cursor", request, "--timeout-seconds", "0").stdout)
+        event = output["events"][0]
+        self.assertEqual(event["action"], "receipt"); self.assertEqual(event["in_reply_to"], request); self.assertEqual(event["progress"], "Waiting.")
+
+    def test_receipt_requires_a_request_addressed_to_the_sender(self):
+        self.work("repo-_-_-1"); self.work("repo-_-_-2"); self.work("repo-_-_-3")
+        request = self.request("repo-_-_-1", "repo-_-_-2")
+        forged = self.run_helper("broadcast", "--work-id", "repo-_-_-3", "--source-agent", "watch", "--target-work-id", "repo-_-_-1", "--action", "receipt", "--in-reply-to", request, check=False)
+        self.assertEqual(forged.returncode, 2)
+        missing = self.run_helper("broadcast", "--work-id", "repo-_-_-2", "--source-agent", "watch", "--target-work-id", "repo-_-_-1", "--action", "receipt", check=False)
+        self.assertEqual(missing.returncode, 2)
+
+    def test_lifecycle_is_set_only_when_given(self):
+        self.work("repo-_-_-1")
+        state = self.root / "state/active/repo-_-_-1.md"
+        self.run_helper("update-work", "--work-id", "repo-_-_-1", "--repo", "/clone/repo", "--issue", "_", "--pr", "_", "--sub-worker", "1", "--user-requirement", "Test protocol.", "--progress", "Paused for a decision.", "--lifecycle", "blocked")
+        self.assertIn('lifecycle: "blocked"', state.read_text())
+        self.work("repo-_-_-1")
+        self.assertIn('lifecycle: "blocked"', state.read_text())
+
 if __name__ == "__main__": unittest.main()

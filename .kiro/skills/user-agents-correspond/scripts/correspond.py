@@ -20,6 +20,8 @@ SENSITIVE_RE = re.compile(r"(?i)\b(password|passphrase|secret|token|api[ _-]?key
 POLL_INTERVAL_SECONDS = 10
 STATE_SCHEMA = "user-agents-correspond-state/v2"
 MESSAGE_SCHEMA = "user-agents-correspond/v2"
+ACTIONS = {"information", "handoff", "request", "acknowledgement", "receipt"}
+RECEIPT_BODY = "已送达：消息已转交主 session，主 session 处理后另行回复。"
 
 
 def fail(message: str) -> None:
@@ -180,6 +182,8 @@ def update_work(arguments: argparse.Namespace) -> None:
         filename_timestamp(name)
         if name not in state["accepted_files"]:
             state["accepted_files"].append(name)
+    if arguments.lifecycle is not None:
+        state["lifecycle"] = arguments.lifecycle
     state.update({"schema": STATE_SCHEMA, "work_id": arguments.work_id, "repo": arguments.repo, "issue": issue, "pr": pr, "sub_worker": worker, "user_requirement": arguments.user_requirement, "lifecycle": state["lifecycle"], "progress": arguments.progress})
     save_state(path, state)
     print(path)
@@ -206,13 +210,20 @@ def restore_work(arguments: argparse.Namespace) -> None:
 def publish(arguments: argparse.Namespace) -> None:
     root = Path(arguments.correspondence_dir).resolve()
     _, state = load_state(root, arguments.work_id)
-    body = Path(arguments.body_file).read_text(encoding="utf-8").rstrip("\n")
+    if arguments.action not in ACTIONS:
+        fail("invalid action")
+    if arguments.action == "receipt":
+        if arguments.body_file is not None:
+            fail("receipt uses a fixed body and takes no body_file")
+        body = RECEIPT_BODY
+    else:
+        if arguments.body_file is None:
+            fail("body_file is required")
+        body = Path(arguments.body_file).read_text(encoding="utf-8").rstrip("\n")
     require_safe_text(arguments.source_agent, "source_agent")
     require_safe_text(body, "message body")
     if arguments.target_work_id != "broadcast":
         split_work_id(arguments.target_work_id)
-    if arguments.action not in {"information", "handoff", "request", "acknowledgement"}:
-        fail("invalid action")
     filename = new_filename()
     message: dict[str, Any] = {"schema": MESSAGE_SCHEMA, "created_at_utc": utc_from_filename(filename), "source_agent": arguments.source_agent, "work_id": arguments.work_id, "target_work_id": arguments.target_work_id, "repo": state["repo"], "issue": state["issue"], "pr": state["pr"], "sub_worker": state["sub_worker"], "user_requirement": state["user_requirement"], "progress": state["progress"], "action": arguments.action}
     if arguments.action == "request":
@@ -224,11 +235,15 @@ def publish(arguments: argparse.Namespace) -> None:
         require_safe_text(arguments.requested_acknowledgement, "requested acknowledgement")
         message["requested_acknowledgement_from_work_id"] = arguments.requested_acknowledgement_from_work_id
         message["requested_acknowledgement"] = arguments.requested_acknowledgement
-    if arguments.action == "acknowledgement":
+    if arguments.action in {"acknowledgement", "receipt"}:
         if not arguments.in_reply_to:
-            fail("acknowledgement needs in_reply_to")
+            fail(f"{arguments.action} needs in_reply_to")
         filename_timestamp(arguments.in_reply_to)
         message["in_reply_to"] = arguments.in_reply_to
+    if arguments.action == "receipt":
+        request = referenced_request(root, arguments.in_reply_to)
+        if request is None or request["target_work_id"] != arguments.work_id or request["work_id"] != arguments.target_work_id:
+            fail("receipt must reply to a request sent to this worker and target its requester")
     path = root / "messages" / filename
     atomic_publish(path, write_frontmatter(message, "\n## Message\n\n" + body + "\n"))
     print(path)
@@ -253,17 +268,31 @@ def valid_message(path: Path) -> tuple[dict[str, Any], str]:
     return message, body
 
 
-def acknowledgement_matches(root: Path, local: str, message: dict[str, Any], body: str) -> bool:
-    if message.get("action") != "acknowledgement" or message.get("target_work_id") != local or not isinstance(message.get("in_reply_to"), str):
-        return False
-    request_path = root / "messages" / message["in_reply_to"]
+def referenced_request(root: Path, filename: Any) -> dict[str, Any] | None:
+    if not isinstance(filename, str) or not FILENAME_RE.fullmatch(filename):
+        return None
+    request_path = root / "messages" / filename
     if not request_path.is_file():
-        return False
+        return None
     try:
         request, _ = valid_message(request_path)
     except ValueError:
+        return None
+    return request if request.get("action") == "request" else None
+
+
+def acknowledgement_matches(root: Path, local: str, message: dict[str, Any], body: str) -> bool:
+    if message.get("action") != "acknowledgement" or message.get("target_work_id") != local:
         return False
-    return request.get("action") == "request" and request.get("work_id") == local and request.get("target_work_id") == message["work_id"] and request.get("requested_acknowledgement_from_work_id") == message["work_id"] and request.get("requested_acknowledgement") == body
+    request = referenced_request(root, message.get("in_reply_to"))
+    return request is not None and request.get("work_id") == local and request.get("target_work_id") == message["work_id"] and request.get("requested_acknowledgement_from_work_id") == message["work_id"] and request.get("requested_acknowledgement") == body
+
+
+def receipt_matches(root: Path, local: str, message: dict[str, Any]) -> bool:
+    if message.get("action") != "receipt" or message.get("target_work_id") != local:
+        return False
+    request = referenced_request(root, message.get("in_reply_to"))
+    return request is not None and request.get("work_id") == local and request.get("target_work_id") == message["work_id"]
 
 
 def watch(arguments: argparse.Namespace) -> None:
@@ -296,10 +325,16 @@ def watch(arguments: argparse.Namespace) -> None:
                 continue
             if message["action"] == "acknowledgement" and not acknowledgement_matches(root, arguments.work_id, message, body):
                 continue
+            if message["action"] == "receipt" and not receipt_matches(root, arguments.work_id, message):
+                continue
             event = {"filename": path.name, "action": message["action"], "source_work_id": message["work_id"], "target_work_id": message["target_work_id"], "body": body}
             if message["action"] == "request":
                 event["requested_acknowledgement_from_work_id"] = message["requested_acknowledgement_from_work_id"]
                 event["requested_acknowledgement"] = message["requested_acknowledgement"]
+            if message["action"] in {"acknowledgement", "receipt"}:
+                event["in_reply_to"] = message["in_reply_to"]
+            if message["action"] == "receipt":
+                event["progress"] = message["progress"]
             events.append(event)
         if has_read_message or time.monotonic() >= deadline:
             work = {"user_requirement": state["user_requirement"], "progress": state["progress"]}
@@ -318,10 +353,12 @@ def parser() -> argparse.ArgumentParser:
     update.add_argument("--sub-worker", type=int, required=True)
     update.add_argument("--last-read-file")
     update.add_argument("--accepted-file", action="append", default=[])
+    update.add_argument("--lifecycle", choices=["active", "blocked"])
     update.set_defaults(handler=update_work)
     broadcast = commands.add_parser("broadcast")
-    for name in ("work-id", "source-agent", "action", "body-file"):
+    for name in ("work-id", "source-agent", "action"):
         broadcast.add_argument(f"--{name}", required=True)
+    broadcast.add_argument("--body-file")
     broadcast.add_argument("--target-work-id", default="broadcast")
     broadcast.add_argument("--requested-acknowledgement-from-work-id")
     broadcast.add_argument("--requested-acknowledgement")

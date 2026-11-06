@@ -6,8 +6,10 @@
 
 1. `target_work_id` 为完整 `work_id` 时，只有该 worker 视为有效，其他 worker 视为无效。
 2. `target_work_id` 为 `broadcast` 时，消息源与当前 worker 的 `work_id` 必须同 repo、同 issue、同 PR，否则无效。
-3. 满足第 2 项的广播，正文首行为 `pattern: <name>` 且 `patterns/<name>.md` 存在时视为有效，并按该文件处理；其余广播由 AI 依据当前 work 的任务需求与进展判断是否相关，相关才有效。
+3. 满足第 2 项的广播，正文首行为 `pattern: <name>` 且 skill 目录下存在 `patterns/<name>.md` 时直接有效；其它广播由 AI 依据当前 work 的任务需求与进展判断是否相关，相关才有效。
 
 acknowledgement 还必须引用存在的 request，且 request 的发送 worker、指定回应 worker、acknowledgement 的目标 worker 和精确正文均一致。
+
+receipt 还必须引用存在的 request，且该 request 由当前 worker 发出、发给 receipt 的发送方。
 
 有效 message 的文件名加入 accepted_files。
