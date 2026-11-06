@@ -1,6 +1,6 @@
 # 消息有效性判定
 
-监控 workflow 按以下顺序决定是否把 message 送入当前 session：
+监控 workflow 首先忽略当前 worker 自己发送的所有 message。其余 message 按以下顺序决定是否送入当前 session：
 
 1. `target_work_id` 为完整 `work_id` 时，只有该 worker 有效，其他 worker 无效。
 2. `target_work_id` 为 `broadcast` 时，消息源与订阅 worker 的 `work_id` 必须同 repo、同 issue、同 PR。

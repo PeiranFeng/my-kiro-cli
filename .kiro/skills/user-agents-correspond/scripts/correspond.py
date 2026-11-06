@@ -131,7 +131,7 @@ def state_path(root: Path, work_id: str) -> Path:
 
 
 def validate_state(state: dict[str, Any], work_id: str) -> None:
-    required = {"schema", "work_id", "repo", "issue", "pr", "sub_worker", "user_requirement", "updated_at_utc", "lifecycle", "last_read_file", "read_files", "accepted_files", "progress"}
+    required = {"schema", "work_id", "repo", "issue", "pr", "sub_worker", "user_requirement", "updated_at_utc", "lifecycle", "last_read_file", "accepted_files", "progress"}
     if state.get("schema") != STATE_SCHEMA or set(state) != required or state.get("work_id") != work_id:
         fail("state schema or fields are invalid")
     repo, issue, pr, worker = split_work_id(work_id)
@@ -139,9 +139,8 @@ def validate_state(state: dict[str, Any], work_id: str) -> None:
         fail("state scope does not match work_id")
     if state["lifecycle"] not in {"active", "blocked"} or state["last_read_file"] != "none" and not FILENAME_RE.fullmatch(state["last_read_file"]):
         fail("state lifecycle or cursor is invalid")
-    for field in ("read_files", "accepted_files"):
-        if not isinstance(state[field], list) or any(not isinstance(name, str) or not FILENAME_RE.fullmatch(name) for name in state[field]):
-            fail("state message records are invalid")
+    if not isinstance(state["accepted_files"], list) or any(not isinstance(name, str) or not FILENAME_RE.fullmatch(name) for name in state["accepted_files"]):
+        fail("state accepted records are invalid")
 
 
 def load_state(root: Path, work_id: str) -> tuple[Path, dict[str, Any]]:
@@ -169,15 +168,12 @@ def update_work(arguments: argparse.Namespace) -> None:
     if path.exists():
         _, state = load_state(root, arguments.work_id)
     else:
-        state = {"lifecycle": "active", "last_read_file": "none", "read_files": [], "accepted_files": []}
+        state = {"lifecycle": "active", "last_read_file": "none", "accepted_files": []}
+    state.pop("read_files", None)
     if arguments.last_read_file is not None:
         if arguments.last_read_file != "none":
             filename_timestamp(arguments.last_read_file)
         state["last_read_file"] = arguments.last_read_file
-    for name in arguments.read_file:
-        filename_timestamp(name)
-        if name not in state["read_files"]:
-            state["read_files"].append(name)
     for name in arguments.accepted_file:
         filename_timestamp(name)
         if name not in state["accepted_files"]:
@@ -250,24 +246,29 @@ def acknowledgement_matches(root: Path, local: str, message: dict[str, Any], bod
     return request.get("action") == "request" and request.get("work_id") == local and request.get("target_work_id") == message["work_id"] and request.get("requested_acknowledgement_from_work_id") == message["work_id"] and request.get("requested_acknowledgement") == body
 
 
-def watch(arguments: argparse.Namespace) -> None:
+def receive(arguments: argparse.Namespace) -> None:
     root = Path(arguments.correspondence_dir).resolve()
     _, state = load_state(root, arguments.work_id)
+    accepted_files = set(state["accepted_files"]) | set(arguments.accepted_file)
     cursor = arguments.cursor if arguments.cursor is not None else state["last_read_file"]
     if cursor != "none":
         filename_timestamp(cursor)
     deadline = time.monotonic() + arguments.timeout_seconds
     while True:
-        read_files: list[str] = []
+        has_read_message = False
         events: list[dict[str, Any]] = []
         for path in sorted((item for item in (root / "messages").glob("*.md") if FILENAME_RE.fullmatch(item.name)), key=lambda item: item.name):
             if cursor != "none" and path.name <= cursor:
                 continue
             cursor = path.name
-            read_files.append(cursor)
+            has_read_message = True
             try:
                 message, body = valid_message(path)
             except ValueError:
+                continue
+            if path.name in accepted_files:
+                continue
+            if message["work_id"] == arguments.work_id:
                 continue
             direct = message["target_work_id"] == arguments.work_id
             broadcast = message["target_work_id"] == "broadcast" and split_work_id(message["work_id"])[:3] == split_work_id(arguments.work_id)[:3]
@@ -276,8 +277,8 @@ def watch(arguments: argparse.Namespace) -> None:
             if message["action"] == "acknowledgement" and not acknowledgement_matches(root, arguments.work_id, message, body):
                 continue
             events.append({"filename": path.name, "action": message["action"], "source_work_id": message["work_id"], "target_work_id": message["target_work_id"], "body": body})
-        if read_files or time.monotonic() >= deadline:
-            print(json.dumps({"cursor": cursor, "read_files": read_files, "events": events}, ensure_ascii=False))
+        if has_read_message or time.monotonic() >= deadline:
+            print(json.dumps({"cursor": cursor, "events": events}, ensure_ascii=False))
             return
         time.sleep(min(POLL_INTERVAL_SECONDS, max(0, deadline - time.monotonic())))
 
@@ -291,7 +292,6 @@ def parser() -> argparse.ArgumentParser:
         update.add_argument(f"--{name}", required=True)
     update.add_argument("--sub-worker", type=int, required=True)
     update.add_argument("--last-read-file")
-    update.add_argument("--read-file", action="append", default=[])
     update.add_argument("--accepted-file", action="append", default=[])
     update.set_defaults(handler=update_work)
     broadcast = commands.add_parser("broadcast")
@@ -302,11 +302,12 @@ def parser() -> argparse.ArgumentParser:
     broadcast.add_argument("--requested-acknowledgement")
     broadcast.add_argument("--in-reply-to")
     broadcast.set_defaults(handler=publish)
-    watcher = commands.add_parser("watch")
-    watcher.add_argument("--work-id", required=True)
-    watcher.add_argument("--cursor")
-    watcher.add_argument("--timeout-seconds", type=float, default=POLL_INTERVAL_SECONDS)
-    watcher.set_defaults(handler=watch)
+    receiver = commands.add_parser("receive")
+    receiver.add_argument("--work-id", required=True)
+    receiver.add_argument("--cursor")
+    receiver.add_argument("--accepted-file", action="append", default=[])
+    receiver.add_argument("--timeout-seconds", type=float, default=POLL_INTERVAL_SECONDS)
+    receiver.set_defaults(handler=receive)
     return result
 
 
