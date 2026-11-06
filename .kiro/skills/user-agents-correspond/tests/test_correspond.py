@@ -52,4 +52,38 @@ class TestProtocol(unittest.TestCase):
         self.work("repo-_-_-1")
         self.assertIn('legacy_field: "kept"', state.read_text())
 
+    def test_watch_accepts_call_timestamp(self):
+        self.work("repo-_-_-1")
+        output = json.loads(self.run_helper("watch", "--work-id", "repo-_-_-1", "--call-timestamp", "2026-11-06T06:40:00Z", "--timeout-seconds", "0").stdout)
+        self.assertEqual(output["events"], [])
+
+    def test_archive_then_restore_preserves_state_bytes(self):
+        self.work("repo-_-_-1")
+        active = self.root / "state/active/repo-_-_-1.md"; archived = self.root / "state/archived/repo-_-_-1.md"
+        before = active.read_bytes()
+        self.run_helper("archive", "--work-id", "repo-_-_-1")
+        self.assertFalse(active.exists()); self.assertEqual(archived.read_bytes(), before)
+        self.run_helper("restore", "--work-id", "repo-_-_-1")
+        self.assertFalse(archived.exists()); self.assertEqual(active.read_bytes(), before)
+
+    def test_archived_work_is_unusable_until_restored(self):
+        self.work("repo-_-_-1"); self.run_helper("archive", "--work-id", "repo-_-_-1")
+        repo, issue, pr, worker = "repo", "_", "_", "1"
+        update = self.run_helper("update-work", "--work-id", "repo-_-_-1", "--repo", f"/clone/{repo}", "--issue", issue, "--pr", pr, "--sub-worker", worker, "--user-requirement", "Test protocol.", "--progress", "Waiting.", check=False)
+        self.assertEqual(update.returncode, 2); self.assertFalse((self.root / "state/active/repo-_-_-1.md").exists())
+        watch = self.run_helper("watch", "--work-id", "repo-_-_-1", "--timeout-seconds", "0", check=False)
+        self.assertEqual(watch.returncode, 2)
+
+    def test_archive_and_restore_refuse_missing_source_or_existing_target(self):
+        self.assertEqual(self.run_helper("archive", "--work-id", "repo-_-_-1", check=False).returncode, 2)
+        self.assertEqual(self.run_helper("restore", "--work-id", "repo-_-_-1", check=False).returncode, 2)
+        self.work("repo-_-_-1"); self.run_helper("archive", "--work-id", "repo-_-_-1")
+        archived = self.root / "state/archived/repo-_-_-1.md"
+        active = self.root / "state/active/repo-_-_-1.md"
+        active.write_bytes(archived.read_bytes()); archived_before = archived.read_bytes(); active_before = active.read_bytes()
+        result = self.run_helper("restore", "--work-id", "repo-_-_-1", check=False)
+        self.assertEqual(result.returncode, 2); self.assertEqual(archived.read_bytes(), archived_before); self.assertEqual(active.read_bytes(), active_before)
+        result = self.run_helper("archive", "--work-id", "repo-_-_-1", check=False)
+        self.assertEqual(result.returncode, 2); self.assertEqual(archived.read_bytes(), archived_before); self.assertEqual(active.read_bytes(), active_before)
+
 if __name__ == "__main__": unittest.main()

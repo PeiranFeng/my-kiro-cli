@@ -11,19 +11,21 @@ description: 基于本地 Markdown 文件维护协作 work、发布和接收消�
 - `broadcast`：只追加带 UTC 时间戳的新 message，绝不修改已有 message。
 - `receive`：一次性接收，由当前 session 直接完成，不使用脚本或 workflow。
 - `watch`：持续监控，由当前 session 启动的专用 workflow 完成，直到当前 session 停止它。
+- `archive`：把 work state 从 `state/active/` 移到 `state/archived/`。
+- `restore`：把归档的 work state 移回 `state/active/`，恢复为归档前的状态。
 
 `receive` 与 `watch` 使用同一套 [消息有效性规则](references/message-validity.md)，区别只在于执行一次还是持续执行。
 
 ## 文件与标识
 
-- 通信根目录是 `/home/peiran/data/my-kiro-cli/.kiro/agent-correspondence/`：`messages/` 存放 message，`state/active/<work_id>.md` 存放 work state。
+- 通信根目录是 `/home/peiran/data/my-kiro-cli/.kiro/agent-correspondence/`：`messages/` 存放 message，`state/active/<work_id>.md` 存放 work state，`state/archived/<work_id>.md` 存放归档的 work state。
 - `work_id` 的格式为 `<repo>-<issue>-<pr>-<sub-worker>`。`repo` 是仓库目录名转小写并把 `_` 换成 `-`，无仓库时为 `not-applicable`；`issue`、`pr` 是十进制编号或 `_`；`sub-worker` 是不带前导零的正整数。前三段相同的 worker 属于同一协作范围。
 - message 文件名为 UTC 时间 `YYYY-MM-DDTHH-MM-SS-NNNNNNNNNZ.md`，文件名顺序即时间顺序；不符合该格式的文件不属于协议。
 - 文本字段不得为空，也不得含 password、passphrase、secret、token、api key、private key、connection string 字样，否则脚本拒绝写入。
 
 ## 脚本
 
-`update-work`、`broadcast`、`watch` 都通过以下方式调用；`--correspondence-dir` 写在子命令之前，默认为通信根目录。出错时退出码为 2，stderr 输出一行错误，stdout 无输出。
+`update-work`、`broadcast`、`watch`、`archive`、`restore` 都通过以下方式调用；`--correspondence-dir` 写在子命令之前，默认为通信根目录。出错时退出码为 2，stderr 输出一行错误，stdout 无输出。
 
 ```bash
 python3 /home/peiran/data/my-kiro-cli/.kiro/skills/user-agents-correspond/scripts/correspond.py [--correspondence-dir "<dir>"] <command> ...
@@ -35,6 +37,7 @@ python3 /home/peiran/data/my-kiro-cli/.kiro/skills/user-agents-correspond/script
 ... update-work --work-id "<work_id>" --repo "<仓库绝对路径或 not-applicable>" --issue "<issue>" --pr "<pr>" --sub-worker <n> --user-requirement "<需求>" --progress "<进展>" [--last-read-file "<文件名或 none>"] [--accepted-file "<文件名>" ...]
 ```
 
+- 该 `work_id` 已归档时拒绝写入，须先 `restore`。
 - 除 `--last-read-file` 与 `--accepted-file` 外均必填；`--repo` 的目录名、`--issue`、`--pr`、`--sub-worker` 必须与 `work_id` 对应段一致。
 - state 不存在时创建，`lifecycle` 为 `active`，`last_read_file` 为 `none`，`accepted_files` 为空。
 - 每次调用用新值替换 `user_requirement` 与 `progress`。
@@ -56,14 +59,26 @@ python3 /home/peiran/data/my-kiro-cli/.kiro/skills/user-agents-correspond/script
 ### watch
 
 ```bash
-... watch --work-id "<work_id>" [--cursor "<文件名或 none>"] [--accepted-file "<文件名>" ...] [--timeout-seconds <秒>]
+... watch --work-id "<work_id>" [--cursor "<文件名或 none>"] [--accepted-file "<文件名>" ...] [--timeout-seconds <秒>] [--call-timestamp "<本次调用的 UTC 时间>"]
 ```
 
+- `--call-timestamp` 不影响脚本行为。workflow 每次调用都传入本次调用的 UTC 时间，格式为 `YYYY-MM-DDTHH:MM:SSZ`，使每次调用的命令文本都不相同，避免 Kiro 平台把重复的相同调用判定为死循环而打断 watch。该值必须以字面值写进命令，不能写成 `$(date ...)` 这类由 shell 展开的表达式，否则命令文本仍然相同；无法确定当前时间时，保证它晚于上一次调用的值即可。
 - `--cursor` 省略时取 state 的 `last_read_file`；`none` 表示从最早的 message 开始。
 - `--accepted-file` 可重复，与 state 的 `accepted_files` 合并；合并结果中的 message 不再输出为 event。
 - `--timeout-seconds` 默认 10，不得为负。脚本立即扫描一次，之后每 10 秒扫描一次；读到新 message 时立即返回，否则到时返回。
 - 脚本只读，输出一行 JSON：`cursor`；`work`，即当前 work 的 `user_requirement` 与 `progress`；`events`，每个 event 含 `filename`、`action`、`source_work_id`、`target_work_id`、`body`，request 另含 `requested_acknowledgement_from_work_id` 与 `requested_acknowledgement`。
 - 输出的 event 已通过自身消息、目标 `work_id`、协作范围与 acknowledgement 的确定性判定。
+
+### archive 与 restore
+
+```bash
+... archive --work-id "<work_id>"
+... restore --work-id "<work_id>"
+```
+
+- 两者都先校验源 state，再把文件原样移到目标目录，不改写任何字段（含 `lifecycle`、`updated_at_utc`、cursor、`accepted_files` 与其它字段），因此 `restore` 后的 state 与归档前逐字节相同。
+- 源 state 不存在或目标位置已有同名 state 时报错，不覆盖。
+- 只有 `state/active/` 下的 state 能被 `update-work`、`broadcast`、`watch` 使用；该 work 有 `watch` workflow 在运行时，先发 `stop` 并把返回的 cursor 与 accepted_files 用 `update-work` 写入 state，再 `archive`。
 
 ## Work state
 
@@ -79,7 +94,7 @@ work state 使用 `user-agents-correspond-state/v2`，至少包含任务需求�
 
 ## watch
 
-当前 session 启动 workflow 时，在 prompt 中给出 `work_id` 与本 skill 路径，要求它只执行本节。workflow 循环调用 `watch` 脚本，直到收到 `stop`：首次调用省略 `--cursor` 与 `--accepted-file`，之后每次传入内存中的 cursor 与全部 accepted_files。workflow 依据输出中的 `work` 对广播 event 做 AI 相关性判断。
+当前 session 启动 workflow 时，在 prompt 中给出 `work_id` 与本 skill 路径，要求它只执行本节。workflow 循环调用 `watch` 脚本，直到收到 `stop`：首次调用省略 `--cursor` 与 `--accepted-file`，之后每次传入内存中的 cursor 与全部 accepted_files；每次调用都传入新的 `--call-timestamp`。workflow 依据输出中的 `work` 对广播 event 做 AI 相关性判断。
 
 workflow 对每条有效 event，把文件名加入 accepted_files，再用 `send_message`（severity `info`）把 event 全部字段、最新 cursor 与 accepted_files 发给当前 session。
 
@@ -94,6 +109,12 @@ workflow 不修改任何文件，也不做上述以外的工作。
 
 被 request 指定的 worker 用 `broadcast --action acknowledgement --target-work-id "<请求者 work_id>" --in-reply-to "<request 文件名>"` 回复，正文与 `requested_acknowledgement` 完全一致。
 
+## 预设通信模式
+
+`patterns/<name>.md` 定义预设通信模式，正文首行为 `pattern: <name>` 的 message 按对应文件处理。用户要求某种模式时，按对应文件发起。
+
+- [roll-call](patterns/roll-call.md)：点名，让同一协作范围内所有 active 的 worker 定向回报自己的 work_id。
+
 ## Workflow 边界
 
-workflow 只用于 `watch`，用户决定是否启动。`update-work`、`broadcast`、`receive`、skill 修改与测试均由当前 session 完成。
+workflow 只用于 `watch`，用户决定是否启动。`update-work`、`broadcast`、`receive`、`archive`、`restore`、skill 修改与测试均由当前 session 完成。
