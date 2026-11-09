@@ -45,6 +45,15 @@ uv run dbt build --target personal ...
 `dbt parse` 是例外，纯本地解析 Jinja/YAML/依赖图，不连接 Snowflake、不需要任何角色权限，`--target` 只是选用哪个 target 的变量值做编译，不代表会用该 target 的身份登录（见 `personal-schema-testing.md` 的 manifest 获取方法，用的正是 `dbt parse --target prod`）。只有 `dbt parse` 可以安全地指定 `--target prod`，其余 dbt 子命令一律只用 `--target personal`。
 
 
+## 远程长任务不阻塞本地 shell
+
+提交到 Snowflake 执行的长任务（`dbt build`、`snow sql` 调用存储过程等），本地 shell 不阻塞等待其结束：
+
+- 以脱离当前 shell 的后台进程启动，启动时间、控制台输出、退出码分别写入仓库外测试目录下的文件。
+- 启动后短暂延迟，确认输出显示任务已开始提交，随即退出 shell。
+- 不终止该后台进程。
+- 之后的进度依据上述文件与查询历史判断，判断规则见下一节。
+
 ## 长时 Python dbt 构建的中断与恢复
 
 Python model 的 `dbt build` 会提交 Snowflake 存储过程调用。dbt 在该调用返回前不会写入最终 `run_results.json`，日志也可能长时间停留在连接或调用行，因此日志静默、找不到本地 dbt 进程、或没有最终结果文件都只表示本地调用未完成，不能据此判定远程执行失败或卡死。
