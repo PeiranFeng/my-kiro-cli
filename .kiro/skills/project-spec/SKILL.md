@@ -21,6 +21,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 | `build` | approved 的架构和用例 | 代码、测试，status：approved → implemented | `references/build.md` |
 | `maintain` | 全部文档与代码 | `.project-spec/maintain-report.md` | `references/maintain.md` |
 | `review [scope]` | 本 session 的 design 或 code | `.project-spec/reviews/` | `references/review.md` |
+| `review bootstrap` | `bootstrap` 产出的文档 | `.project-spec/reviews/`，并由 `bootstrap` 修改文档 | `references/bootstrap-review.md` |
 | `principle <描述>` | 用户要新增、修改、删除或恢复的原则 | `references/principles/<目录>/` | `references/principles/README.md` |
 
 `help` 读取 `README.md`，按用户关心的部分简短介绍命令、流程和自定义方式；再运行 `scripts/principle.py list --summary`，按分类列出现有原则（ID 名词短语：摘要）。不写任何文件，内容不在此重复。
@@ -44,7 +45,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 
 ## 自动 review
 
-`bootstrap`、`requirements`、`architecture` 校验通过后，以及 `build` 完成后，各自动执行一次 `review`，只给用户简短反馈，不阻塞流程。`bootstrap` 之后还要按 `references/docs-commands.md` 根据发现修改文档。
+`requirements`、`architecture` 校验通过后，以及 `build` 完成后，各自动执行一次 `review`，只给用户简短反馈，不阻塞流程。`bootstrap` 校验通过后自动执行一次 `review bootstrap`，并按 `references/bootstrap-review.md` 根据发现修改文档。
 
 ## 文档结构与原则
 

@@ -14,7 +14,7 @@ from typing import List, Optional, Sequence
 ROOT = Path(__file__).resolve().parents[1] / "references" / "principles"
 TRASH = "trash"
 CATEGORIES = {"requirement": "Q", "architecture": "A", "code": "C", "test": "T", "review": "R"}
-STAGES = ("requirement", "design", "code", "test", "review", "bootstrap")
+STAGES = ("requirement", "design", "code", "test", "review")
 ID_PATTERN = re.compile(r"^([A-Z])([1-9][0-9]*)$")
 
 
