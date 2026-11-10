@@ -33,7 +33,8 @@ docs/architecture/
 └── <module>/
     ├── README.md                   kind: module，对应 <source>/
     ├── <subdir>/README.md          kind: package，可选
-    └── <path>/<stem>.md            kind: source，对应 <source>/<path>/<stem><suffix>
+    ├── <path>/<stem>.md            kind: source，对应 <source>/<path>/<stem><suffix>
+    └── <path>/<stem>.structure.md  kind: structure，与同路径的 source 文档配对
 docs/test-cases/
 ├── journeys/<name>.md              跨模块 journey，对应 <journeys.tests>/<testFile>
 └── <module>/
@@ -44,7 +45,8 @@ docs/test-cases/
 - 需求只有项目级和模块级两层，文件名用小写 kebab-case，一个文件一个功能点或约束。
 - 架构树只为公开源文件建文档，文件名保持源文件名去掉后缀。
 - 每个模块必须有 `docs/architecture/<module>/README.md`。
-- 含公开接口的 source 文档必须有同路径的 cases 文档。
+- 每个 source 文档必须有同路径的 structure 文档；structure 文档必须有同路径的 source 文档。
+- 含公开接口的 structure 文档必须有同路径的 cases 文档。
 - journey 放在其全部 targets 所在目录的最近公共目录下的 `journeys/`；公共目录为空时放在 `docs/test-cases/journeys/`。
 - `README.md` 只出现在架构树中。
 
@@ -58,6 +60,7 @@ docs/test-cases/
 |------|------|---------|----------|
 | `requirement` / `constraint` | requirements | `req.` | 无 |
 | `module` / `package` / `source` | architecture | `arch.` | `requirements`、`depends-on` |
+| `structure` | architecture | `struct.` | 无 |
 | `cases` | test-cases | `cases.` | `verifies` |
 | `journey` | test-cases 的 `journeys/` | `journey.` | `targets`、`verifies` |
 
@@ -66,7 +69,7 @@ docs/test-cases/
 ## ID 与接口小节
 
 - ID 匹配 `^[a-z][a-z0-9]*(\.[a-z0-9][a-z0-9_-]*)+$`，在三棵树中全局唯一，移动文件不更换。
-- 公开接口写成 source 文档里的二级或三级标题：`## <符号或签名> {#api.<...>}`。标题中括号前最后一个标识符是代码里的符号名。
+- 公开接口写成 structure 文档里的二级或三级标题：`## <符号或签名> {#api.<...>}`。标题中括号前最后一个标识符是代码里的符号名；其他 kind 的文档只有 cases 可以声明小节 ID。
 - cases 文档为每个接口写同名小节，锚点把 `api.` 换成 `cases.`；不能有架构中不存在的接口小节。
 - 代码块内的标题不参与解析。
 
@@ -79,7 +82,7 @@ docs/test-cases/
 
 ## 正文
 
-需求分条陈述可观察行为、验收条件和边界。架构陈述职责、设计模式及理由、数据约束和公开接口契约。用例按场景陈述前置条件、动作和可观察结果。用肯定式描述已决定的目标，未决问题写在 `## 待确认`。
+四类文档各有固定格式，骨架与来源见 `templates.md`：需求是 EARS 句式的原子条目；structure 文档是类与函数的结构清单，由脚本从代码生成；source 文档陈述职责、含候选方案的决策和不变量与错误约束；用例是声明式的 Given、When、Then 场景。用肯定式描述已决定的目标，未决问题写在 `## 待确认`。
 
 ## 一致性判定
 
@@ -88,5 +91,6 @@ docs/test-cases/
 - 文件：推出的源码或测试文件不存在。
 - 符号：接口小节的符号名不在对应源文件中。
 - 依赖：approved 或 implemented 文档所依赖的需求是 draft。
+- 结构：implemented 的 structure 文档与 `scripts/gen_structure.py` 对源码生成的结构清单不同，说明文字不参与比对。
 
 行为是否一致不能机械判定，以对应测试通过为准，由 `maintain` 核对。approved 文档没有代码只表示待开发，不算不一致。

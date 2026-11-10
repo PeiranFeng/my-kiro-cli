@@ -5,7 +5,7 @@
 ## 通用规则
 
 - 内部区分用户明确要求、代码现状、推荐设计；不把后两者说成用户要求。
-- 只在答案会改变模块边界、公开契约、数据所有权或验收语义，且无法从上下文推断时才提问；多个问题合并成一份简短摘要。
+- `requirements` 的提问规则见 `requirements.md`。其他命令只在答案会改变模块边界、公开契约、数据所有权或验收语义，且无法从上下文推断时才提问；多个问题合并成一份简短摘要。
 - 有未决问题的文档写 `## 待确认`。
 - 以 ID 定位文档，不按标题猜测；移动文件不换 ID。
 - 不覆盖与本任务无关的用户改动。
@@ -13,25 +13,21 @@
 
 ## bootstrap
 
-不接收自然语言，只依据当前仓库。
+不接收自然语言，只依据当前仓库。方向与开发流程相反：代码 → 架构 → 需求。架构忠实还原代码现实，需求从架构抽象而来。
 
 1. 仓库没有 `docs/project-spec.json` 时，识别模块：每个承担独立职责的代码目录是一个模块。写入配置，在目标仓库 `.gitignore` 加入 `.project-spec/`。
-2. 运行校验，读取 `unmappedSources`：每个公开源文件生成 source 文档和同路径 cases 文档；缺少的模块 README 一并生成。
-3. 从代码行为归纳模块功能点，写入需求树。
-4. 已有 approved 或 implemented 文档不覆盖。代码与它们不一致时，把差异写入 `.project-spec/bootstrap-report.md`，由用户决定改文档还是改代码。
-5. 新生成的文档全部为 `draft`。
-
-## requirements <自然语言>
-
-1. 把描述拆成模块功能点，跨模块约束写成项目级需求，遵守原则 Q1 至 Q3。
-2. 修改已有需求时把它改回 `draft`；不再成立的需求直接删除，并删除只为它存在的引用。
-3. 运行校验，通过后自动 review。
+2. 运行校验，读取 `unmappedSources`：依据代码为每个公开源文件生成 source 文档，缺少的模块 README 一并生成。structure 文档不手写，运行 `scripts/gen_structure.py --project-root <目标仓库> --write` 生成。source 文档只陈述现有的职责、约束和代码中可确认的决策，候选方案无法从代码得知时省略该决策；现状违反设计原则之处不改写进文档，记入 `.project-spec/bootstrap-report.md`，由 review 判断。
+3. 为每个 source 文档写同路径 cases 文档：现有测试覆盖的接口，场景从测试归纳；没有现有测试的接口，在对应小节写明「无现有测试」，不虚构场景。
+4. 依据架构文档（不再直接读代码）抽象模块需求点，写入需求树；需求遵守 stage 含 `requirement` 的全部原则，只保留调用方可观察的行为，内部机制留在架构文档。需求是从实现推断的，不是用户提出的，`bootstrap-report.md` 记明这一点，由用户审查时确认意图。
+5. 回填架构文档的 `requirements` 与 cases 文档的 `verifies`，把三棵树连通。
+6. 已有 approved 或 implemented 文档不覆盖。代码与它们不一致时，把差异写入 `bootstrap-report.md`，由用户决定改文档还是改代码。
+7. 新生成的文档全部为 `draft`。
 
 ## architecture [要求]
 
 1. 范围是 status 为 approved 的需求；draft 需求不作为输入，以及依赖它们的现有架构文档。
-2. 对每个需求决定新增或修改哪些源文件文档，按原则 A1 至 A8 选择设计模式、定义接口；新增模块时同步写入配置和模块 README。
-3. 为每个 source 文档写同路径 cases 文档，按 T1、T2 覆盖每个接口；跨接口流程写 journey。
+2. 对每个需求决定新增或修改哪些源文件，遵守 stage 含 `design` 的全部原则选择设计模式；为每个源文件写 source 文档和同路径 structure 文档（代码尚不存在，按 `templates.md` 手写），新增模块时同步写入配置和模块 README。
+3. 为每个 source 文档写同路径 cases 文档，遵守 `principles/test/` 的原则覆盖每个接口；跨接口流程写 journey。
 4. 被修改的 implemented 或 approved 文档改回 `draft`。
 5. 运行校验，通过后自动 review。
 

@@ -1,6 +1,6 @@
 ---
 name: project-spec
-description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构镜像的需求树、架构树和测试用例树，按已批准的架构开发代码，并检查文档与实现的一致性。当用户要求初始化 repo 文档、写或改需求、设计或改架构、批准文档、按文档开发、检查项目一致性、review 设计或代码时使用。
+description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构镜像的需求树、架构树和测试用例树，按已批准的架构开发代码，并检查文档与实现的一致性。当用户要求初始化 repo 文档、写或改需求、设计或改架构、批准文档、按文档开发、检查项目一致性、review 设计或代码、新增、修改、删除或恢复开发原则时使用。
 ---
 
 # project-spec
@@ -13,15 +13,19 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 
 | 命令 | 输入 | 写 | 细节 |
 |------|------|----|------|
+| `help` | 无 | 无，向用户介绍功能 | `README.md` |
 | `bootstrap` | 无，只读当前仓库 | 三棵树（draft） | `references/docs-commands.md` |
-| `requirements <自然语言>` | 自然语言 | 需求树（draft） | 同上 |
-| `architecture [要求]` | approved 的需求，可附自然语言要求 | 架构树和用例树（draft） | 同上 |
-| `approve [scope]` | 默认全部 draft | 只改 status：draft → approved | 同上 |
+| `requirements <自然语言>` | 自然语言 | 需求树（draft），经准入审核；用户明确要求时可写含待确认项的小样 | `references/requirements.md` |
+| `architecture [要求]` | approved 的需求，可附自然语言要求 | 架构树和用例树（draft） | `references/docs-commands.md` |
+| `approve [scope]` | 默认全部 draft | 只改 status：draft → approved | `references/docs-commands.md` |
 | `build` | approved 的架构和用例 | 代码、测试，status：approved → implemented | `references/build.md` |
 | `maintain` | 全部文档与代码 | `.project-spec/maintain-report.md` | `references/maintain.md` |
 | `review [scope]` | 本 session 的 design 或 code | `.project-spec/reviews/` | `references/review.md` |
+| `principle <描述>` | 用户要新增、修改、删除或恢复的原则 | `references/principles/<目录>/` | `references/principles/README.md` |
 
-用户没有点名命令时按意图选择：仓库还没有 `docs/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`。
+`help` 读取 `README.md`，按用户关心的部分简短介绍命令、流程和自定义方式；再运行 `scripts/principle.py list --summary`，按分类列出现有原则（ID 名词短语：摘要）。不写任何文件，内容不在此重复。
+
+用户没有点名命令时按意图选择：询问功能或用法用 `help`；仓库还没有 `docs/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`；新增、修改、删除或恢复开发原则用 `principle`。
 
 ## 状态与依赖
 
@@ -47,13 +51,14 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 ```text
 <repo>/docs/project-spec.json   模块到源码目录和测试目录的映射
 <repo>/docs/requirements/       按模块组织的功能点
-<repo>/docs/architecture/       镜像源码树，一个公开源文件一个文档
+<repo>/docs/architecture/       镜像源码树，一个公开源文件一个 source 文档和一个 structure 文档
 <repo>/docs/test-cases/         镜像架构树
 <repo>/.project-spec/           校验报告和检查报告，加入 .gitignore
 ```
 
-- 结构规则见 `references/doc-layout.md`，文档骨架见 `references/templates.md`，写文档前读取。
-- 设计、编码、写测试时遵守 `references/principles.md`，review 以它为清单。
+- 结构规则见 `references/doc-layout.md`，文档骨架和格式来源见 `references/templates.md`，写文档前读取。
+- structure 文档由 `scripts/gen_structure.py` 从代码生成：`--project-root <目标仓库>` 列出缺失或过期的文档，加 `--write` 写入。
+- 设计、编码、写测试时遵守 `references/principles/` 中 stage 匹配的原则，review 以它们为清单；需求的写法和准入审核见 `references/requirements.md`。
 - 宿主项目的规则是补充，与本 Skill 冲突时以宿主为准。
 
 ## 目标仓库

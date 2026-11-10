@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from gen_structure import STRUCTURE_SUFFIX, render_body, skeleton, split_frontmatter
+
 SPEC_VERSION = 2
 CONFIG_RELATIVE = "docs/project-spec.json"
 DEFAULT_REPORT = ".project-spec/validation.json"
@@ -31,12 +33,13 @@ KIND_PREFIX = {
     "module": "arch.",
     "package": "arch.",
     "source": "arch.",
+    "structure": "struct.",
     "cases": "cases.",
     "journey": "journey.",
 }
 TREE_KINDS = {
     "requirements": {"requirement", "constraint"},
-    "architecture": {"module", "package", "source"},
+    "architecture": {"module", "package", "source", "structure"},
     "test-cases": {"cases", "journey"},
 }
 KIND_FIELDS = {
@@ -45,13 +48,26 @@ KIND_FIELDS = {
     "module": {"requirements", "depends-on"},
     "package": {"requirements", "depends-on"},
     "source": {"requirements", "depends-on"},
+    "structure": set(),
     "cases": {"verifies"},
     "journey": {"targets", "verifies"},
 }
 LIST_FIELDS = {"requirements", "depends-on", "targets", "verifies"}
 REQUIRED_FIELDS = ("id", "kind", "status")
 STATUSES = {"draft", "approved", "implemented"}
-SECTION_PREFIX = {"source": "api.", "cases": "cases."}
+SECTION_PREFIX = {"structure": "api.", "cases": "cases."}
+REQUIREMENT_SECTION = "需求"
+ENTRY_PATTERN = re.compile(r"^- r(\d+) (.+)$")
+CLAUSE_PATTERNS = [
+    re.compile(pattern)
+    for pattern in (
+        r"^当.+?时，.+?应",
+        r"^在.+?期间，.+?应",
+        r"^若.+?，则.+?应",
+        r"^在具备.+?的情况下，.+?应",
+        r"^[^，。]+?应",
+    )
+]
 
 
 @dataclass
@@ -86,6 +102,7 @@ class Doc:
     path: Path
     metadata: Dict[str, Any]
     sections: List[Section] = field(default_factory=list)
+    body: List[str] = field(default_factory=list)
 
     @property
     def display(self) -> str:
@@ -225,7 +242,7 @@ def _frontmatter_end(lines: List[str]) -> Optional[int]:
     return next((index for index in range(1, len(lines)) if lines[index].strip() == "---"), None)
 
 
-def parse_document(path: Path, where: str, result: Result) -> Optional[Tuple[Dict[str, Any], List[Section]]]:
+def parse_document(path: Path, where: str, result: Result) -> Optional[Tuple[Dict[str, Any], List[Section], List[str]]]:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError) as exc:
@@ -280,7 +297,7 @@ def parse_document(path: Path, where: str, result: Result) -> Optional[Tuple[Dic
         match = SECTION_PATTERN.match(line)
         if match:
             sections.append(Section(match.group(2), match.group(1)))
-    return metadata, sections
+    return metadata, sections, lines[closing + 1 :]
 
 
 def load_tree(project_root: Path, tree: str, result: Result) -> List[Doc]:
@@ -293,7 +310,7 @@ def load_tree(project_root: Path, tree: str, result: Result) -> List[Doc]:
         relative = path.relative_to(root).as_posix()
         parsed = parse_document(path, f"docs/{tree}/{relative}", result)
         if parsed is not None:
-            docs.append(Doc(tree, relative, path, parsed[0], parsed[1]))
+            docs.append(Doc(tree, relative, path, parsed[0], parsed[1], parsed[2]))
     return docs
 
 
@@ -313,7 +330,7 @@ def _expected_kind(doc: Doc, config: Config, result: Result) -> Optional[str]:
             return None
         if parts[-1] == README:
             return "module" if len(parts) == 2 else "package"
-        return "source"
+        return "structure" if parts[-1].endswith(STRUCTURE_SUFFIX) else "source"
     if JOURNEY_DIR in parts[:-1]:
         if parts[-2] != JOURNEY_DIR or JOURNEY_DIR in parts[:-2]:
             result.error(doc.display, "journey 必须直接位于某个 journeys/ 目录下")
@@ -376,6 +393,8 @@ def source_candidates(doc: Doc, config: Config) -> List[str]:
     inner = PurePosixPath(*doc.parts[1:])
     if doc.kind in {"module", "package"}:
         return [PurePosixPath(module.source, inner.parent).as_posix()]
+    if doc.kind == "structure":
+        inner = inner.with_name(inner.name[: -len(STRUCTURE_SUFFIX)] + ".md")
     stem = inner.with_suffix("").as_posix()
     return [PurePosixPath(module.source, f"{stem}{suffix}").as_posix() for suffix in config.suffixes]
 
@@ -429,12 +448,14 @@ def check_code(project_root: Path, docs: List[Doc], config: Config, result: Resu
             entry["source"] = found or (candidates[0] if candidates else None)
             if implemented and candidates and found is None:
                 result.inconsistent(doc.display, f"已实现但源码不存在：{candidates[0]}")
-            if implemented and found and doc.kind == "source":
+            if implemented and found and doc.kind == "structure":
                 text = _read(project_root / found)
                 for section in doc.sections:
                     symbol = section_symbol(section.title)
                     if symbol and not re.search(rf"\b{re.escape(symbol)}\b", text):
                         result.inconsistent(doc.display, f"接口 {section.identifier!r} 的符号 {symbol!r} 不在 {found} 中")
+                if found.endswith(".py"):
+                    check_structure(doc, text, result)
         elif doc.tree == "test-cases":
             expected = test_path(doc, config)
             entry["test"] = expected
@@ -442,6 +463,49 @@ def check_code(project_root: Path, docs: List[Doc], config: Config, result: Resu
                 result.inconsistent(doc.display, f"已实现但测试文件不存在：{expected}")
         paths[doc.node_id] = entry
     return paths
+
+
+def check_structure(doc: Doc, source_text: str, result: Result) -> None:
+    stem = PurePosixPath(doc.relative).name[: -len(STRUCTURE_SUFFIX)]
+    try:
+        expected = render_body(source_text, doc.parts[0], stem)
+    except SyntaxError as exc:
+        result.inconsistent(doc.display, f"源码无法解析：{exc.msg}")
+        return
+    actual = split_frontmatter(_read(doc.path))[1]
+    if skeleton(actual) != skeleton(expected):
+        result.inconsistent(doc.display, "结构与源码不一致，运行 gen_structure.py 查看差异")
+
+
+def check_requirement_entries(doc: Doc, result: Result) -> None:
+    entries: List[str] = []
+    in_section = in_fence = False
+    for line in doc.body:
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+        elif in_fence:
+            continue
+        elif line.startswith("## "):
+            in_section = line[3:].strip() == REQUIREMENT_SECTION
+        elif in_section and line.startswith("- "):
+            entries.append(line)
+    if not entries:
+        result.error(doc.display, f"缺少含条目的 ## {REQUIREMENT_SECTION} 小节")
+        return
+    numbers: List[str] = []
+    for line in entries:
+        match = ENTRY_PATTERN.match(line)
+        if match is None:
+            result.error(doc.display, f"需求条目必须以 '- r<编号> ' 开头：{line!r}")
+            continue
+        numbers.append(match.group(1))
+        text = match.group(2)
+        if not text.endswith("。") or text.count("。") != 1:
+            result.error(doc.display, f"需求条目 r{match.group(1)} 必须恰好是一句话")
+        if not any(pattern.match(text) for pattern in CLAUSE_PATTERNS):
+            result.error(doc.display, f"需求条目 r{match.group(1)} 不符合五种句式之一")
+    if len(numbers) != len(set(numbers)):
+        result.error(doc.display, "需求条目编号重复")
 
 
 def unmapped_sources(project_root: Path, architecture: List[Doc], config: Config) -> List[str]:
@@ -469,6 +533,8 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
 
     for doc in all_docs:
         validate_shape(doc, config, result)
+        if doc.kind in {"requirement", "constraint"}:
+            check_requirement_entries(doc, result)
 
     owner: Dict[str, str] = {}
     section_parent: Dict[str, Doc] = {}
@@ -487,6 +553,7 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
     architecture = {doc.node_id: doc for doc in trees["architecture"] if doc.node_id}
     arch_by_relative = {doc.relative: doc for doc in trees["architecture"]}
     cases_by_relative = {doc.relative: doc for doc in trees["test-cases"] if doc.kind == "cases"}
+    structure_by_relative = {doc.relative[: -len(STRUCTURE_SUFFIX)] + ".md": doc for doc in trees["architecture"] if doc.kind == "structure"}
 
     for module_name in config.modules:
         entry = arch_by_relative.get(f"{module_name}/{README}")
@@ -513,11 +580,17 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
             target = architecture.get(dependency)
             if target is None or target is doc:
                 result.error(doc.display, f"depends-on 引用了不存在或自身的架构文档 {dependency!r}")
-        if doc.kind != "source" or not doc.sections:
+        if doc.kind == "source" and doc.relative not in structure_by_relative:
+            result.error(doc.display, "源文件文档缺少同路径的结构文档 <文件名>.structure.md")
+        if doc.kind != "structure":
             continue
-        mirror = cases_by_relative.get(doc.relative)
+        if arch_by_relative.get(doc.relative[: -len(STRUCTURE_SUFFIX)] + ".md") is None:
+            result.error(doc.display, "没有同路径的源文件架构文档")
+        if not doc.sections:
+            continue
+        mirror = cases_by_relative.get(doc.relative[: -len(STRUCTURE_SUFFIX)] + ".md")
         if mirror is None:
-            result.error(doc.display, "含公开接口的源文件文档缺少同路径的用例文档")
+            result.error(doc.display, "含公开接口的结构文档缺少同路径的用例文档")
             continue
         for api_id in doc.section_ids:
             case_id = "cases." + api_id[len("api.") :]
@@ -534,9 +607,10 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
                 check_requirement_refs(doc, "verifies")
                 continue
             check_requirement_refs(doc, "verifies", set(mirror.values("requirements")))
+            api_ids = structure_by_relative[doc.relative].section_ids if doc.relative in structure_by_relative else []
             for case_id in doc.section_ids:
                 api_id = "api." + case_id[len("cases.") :]
-                if api_id not in mirror.section_ids:
+                if api_id not in api_ids:
                     result.error(doc.display, f"用例小节 {case_id!r} 没有对应接口 {api_id!r}")
         elif doc.kind == "journey":
             check_requirement_refs(doc, "verifies")

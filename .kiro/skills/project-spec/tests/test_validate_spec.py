@@ -11,6 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+from gen_structure import render_body  # noqa: E402
 from validate_spec import section_symbol, validate_project, write_report  # noqa: E402
 
 CONFIG = {
@@ -41,6 +42,9 @@ def write_doc(root: Path, relative: str, metadata: dict, body: str = "") -> None
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
+REQUIREMENT_BODY = "## 需求\n\n- r1 当调用方请求时，系统应返回结果。\n"
+
+
 def node(node_id: str, kind: str, **extra: object) -> dict:
     return {"id": node_id, "kind": kind, "status": "implemented", **extra}
 
@@ -48,23 +52,23 @@ def node(node_id: str, kind: str, **extra: object) -> dict:
 def create_spec(root: Path) -> None:
     (root / "docs").mkdir(parents=True, exist_ok=True)
     (root / "docs/project-spec.json").write_text(json.dumps(CONFIG), encoding="utf-8")
-    write_doc(root, "requirements/data/load-prices.md", node("req.data.load-prices", "requirement"))
-    write_doc(root, "requirements/model/fit.md", node("req.model.fit", "requirement"))
-    write_doc(root, "requirements/latency.md", node("req.latency", "constraint"))
+    write_doc(root, "requirements/data/load-prices.md", node("req.data.load-prices", "requirement"), REQUIREMENT_BODY)
+    write_doc(root, "requirements/model/fit.md", node("req.model.fit", "requirement"), REQUIREMENT_BODY)
+    write_doc(root, "requirements/latency.md", node("req.latency", "constraint"), REQUIREMENT_BODY)
     write_doc(root, "architecture/data/README.md", node("arch.data", "module", requirements=[], **{"depends-on": []}))
     write_doc(root, "architecture/model/README.md", node("arch.model", "module", requirements=[], **{"depends-on": []}))
     write_doc(
         root,
         "architecture/data/loader.md",
         node("arch.data.loader", "source", requirements=["req.data.load-prices", "req.latency"], **{"depends-on": []}),
-        "## `Loader` {#api.data.loader.loader}\n### Loader.load(path) {#api.data.loader.loader.load}\n",
     )
+    write_doc(root, "architecture/data/loader.structure.md", node("struct.data.loader", "structure"), "")
     write_doc(
         root,
         "architecture/model/trainer.md",
         node("arch.model.trainer", "source", requirements=["req.model.fit"], **{"depends-on": ["arch.data.loader"]}),
-        "## fit() {#api.model.trainer.fit}\n",
     )
+    write_doc(root, "architecture/model/trainer.structure.md", node("struct.model.trainer", "structure"), "")
     write_doc(
         root,
         "test-cases/data/loader.md",
@@ -86,6 +90,15 @@ def create_spec(root: Path) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    write_structure(root, "data", "loader")
+    write_structure(root, "model", "trainer")
+
+
+def write_structure(root: Path, module: str, stem: str) -> None:
+    body = render_body((root / f"app/{module}/{stem}.py").read_text(encoding="utf-8"), module, stem)
+    path = root / f"docs/architecture/{module}/{stem}.structure.md"
+    head = path.read_text(encoding="utf-8").split("# 文档", 1)[0]
+    path.write_text(head + body, encoding="utf-8")
 
 
 class ValidateSpecTests(unittest.TestCase):
@@ -121,7 +134,7 @@ class ValidateSpecTests(unittest.TestCase):
         self.assertEqual(report["paths"]["arch.data.loader"]["source"], "app/data/loader.py")
         self.assertEqual(report["paths"]["cases.data.loader"]["test"], "tests/data/test_loader.py")
         self.assertEqual(report["paths"]["journey.train-end-to-end"]["test"], "tests/journeys/test_train-end-to-end.py")
-        self.assertEqual(report["sections"]["api.data.loader.loader.load"], "arch.data.loader")
+        self.assertEqual(report["sections"]["api.data.loader.loader.load"], "struct.data.loader")
 
     def test_section_symbol_extraction(self) -> None:
         self.assertEqual(section_symbol("`Loader`"), "Loader")
@@ -130,6 +143,7 @@ class ValidateSpecTests(unittest.TestCase):
 
     def test_approved_doc_without_code_is_pending_not_inconsistent(self) -> None:
         self.edit("architecture/data/loader.md", "status: implemented", "status: approved")
+        self.edit("architecture/data/loader.structure.md", "status: implemented", "status: approved")
         self.edit("test-cases/data/loader.md", "status: implemented", "status: approved")
         (self.root / "app/data/loader.py").unlink()
         (self.root / "tests/data/test_loader.py").unlink()
@@ -166,7 +180,7 @@ class ValidateSpecTests(unittest.TestCase):
         self.assertTrue(validate_project(self.root)["valid"])
 
     def test_approved_requirement_without_architecture_is_allowed(self) -> None:
-        write_doc(self.root, "requirements/model/predict.md", {"id": "req.model.predict", "kind": "requirement", "status": "approved"})
+        write_doc(self.root, "requirements/model/predict.md", {"id": "req.model.predict", "kind": "requirement", "status": "approved"}, REQUIREMENT_BODY)
         self.assertTrue(validate_project(self.root)["valid"])
 
     def test_implemented_requirement_without_architecture_fails(self) -> None:
@@ -211,7 +225,7 @@ class ValidateSpecTests(unittest.TestCase):
         self.assert_error("缺少同路径的用例文档")
 
     def test_missing_case_section_fails(self) -> None:
-        self.edit("architecture/model/trainer.md", "## fit() {#api.model.trainer.fit}", "## fit() {#api.model.trainer.fit}\n## save {#api.model.trainer.save}")
+        self.edit("architecture/model/trainer.structure.md", "## fit {#api.model.trainer.fit}", "## save {#api.model.trainer.save}\n\n## fit {#api.model.trainer.fit}")
         self.assert_error("缺少接口 'api.model.trainer.save'")
 
     def test_orphan_case_section_fails(self) -> None:
@@ -242,7 +256,71 @@ class ValidateSpecTests(unittest.TestCase):
         self.assert_error("重复")
 
     def test_section_id_in_fenced_code_is_ignored(self) -> None:
-        self.edit("architecture/model/trainer.md", "## fit() {#api.model.trainer.fit}", "## fit() {#api.model.trainer.fit}\n```\n## x {#api.model.trainer.x}\n```")
+        self.edit("architecture/model/trainer.structure.md", "## fit {#api.model.trainer.fit}", "## fit {#api.model.trainer.fit}\n```\n## x {#api.model.trainer.x}\n```")
+        self.assertTrue(validate_project(self.root)["valid"])
+
+    def test_source_without_structure_document_fails(self) -> None:
+        (self.root / "docs/architecture/model/trainer.structure.md").unlink()
+        self.assert_error("缺少同路径的结构文档")
+
+    def test_structure_without_source_document_fails(self) -> None:
+        (self.root / "docs/architecture/model/trainer.md").unlink()
+        self.assert_error("没有同路径的源文件架构文档")
+
+    def test_source_document_cannot_declare_interface_sections(self) -> None:
+        self.edit("architecture/model/trainer.md", "# 文档", "# 文档\n\n## fit {#api.model.trainer.other}")
+        self.assert_error("kind 'source' 的文档不能声明小节 ID")
+
+    def test_structure_drift_from_code_is_inconsistent(self) -> None:
+        (self.root / "app/model/trainer.py").write_text("def fit(epochs):\n    pass\n", encoding="utf-8")
+        self.assert_inconsistent("结构与源码不一致")
+
+    def test_structure_descriptions_do_not_affect_consistency(self) -> None:
+        self.edit("architecture/model/trainer.structure.md", "(无说明)", "手写说明")
+        report = validate_project(self.root)
+        self.assertEqual(report["inconsistencies"], [])
+
+    def test_draft_structure_is_not_compared_with_code(self) -> None:
+        self.edit("architecture/model/trainer.structure.md", "status: implemented", "status: draft")
+        (self.root / "app/model/trainer.py").write_text("def fit(epochs):\n    pass\n", encoding="utf-8")
+        self.assertEqual(validate_project(self.root)["inconsistencies"], [])
+
+    def test_requirement_without_entries_fails(self) -> None:
+        write_doc(self.root, "requirements/model/predict.md", node("req.model.predict", "requirement"), "")
+        self.assert_error("缺少含条目的 ## 需求 小节")
+
+    def test_requirement_entry_must_match_a_clause_pattern(self) -> None:
+        self.edit("requirements/model/fit.md", "当调用方请求时，系统应返回结果。", "返回结果。")
+        self.assert_error("不符合五种句式之一")
+
+    def test_requirement_entry_must_be_one_sentence(self) -> None:
+        self.edit("requirements/model/fit.md", "系统应返回结果。", "系统应返回结果。同时记录日志。")
+        self.assert_error("必须恰好是一句话")
+
+    def test_requirement_entry_needs_numbered_prefix(self) -> None:
+        self.edit("requirements/model/fit.md", "- r1 ", "- ")
+        self.assert_error("必须以 '- r<编号> ' 开头")
+
+    def test_requirement_entry_numbers_are_unique(self) -> None:
+        entry = REQUIREMENT_BODY.strip().splitlines()[-1]
+        self.edit("requirements/model/fit.md", entry, f"{entry}\n{entry}")
+        self.assert_error("编号重复")
+
+    def test_requirement_all_clause_patterns_pass(self) -> None:
+        body = "## 需求\n\n" + "\n".join(
+            f"- r{index} {text}"
+            for index, text in enumerate(
+                (
+                    "系统应返回结果。",
+                    "当调用方请求时，系统应返回结果。",
+                    "在维护期间，系统应拒绝写入。",
+                    "若输入为空，则系统应报错。",
+                    "在具备缓存的情况下，系统应复用结果。",
+                ),
+                start=1,
+            )
+        )
+        write_doc(self.root, "requirements/model/fit.md", node("req.model.fit", "requirement"), body)
         self.assertTrue(validate_project(self.root)["valid"])
 
     def test_fingerprint_ignores_status_only(self) -> None:
