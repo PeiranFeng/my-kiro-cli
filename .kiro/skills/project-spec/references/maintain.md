@@ -1,6 +1,6 @@
 # maintain
 
-maintain 检查整个项目的文档与实现是否一致，只写 `.project-spec/maintain-report.md`，不改其他文件。它不评价设计好坏，那是 `review` 的职责。
+maintain 检查整个项目的文档与实现是否一致，只写 `.kiro/project-spec/<仓库目录名>/maintain-report.md`，不改其他文件。它不评价设计好坏，那是 `review` 的职责。
 
 ## 检查
 

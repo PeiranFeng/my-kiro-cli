@@ -22,7 +22,7 @@
 
 ## 输出
 
-报告写入 `.project-spec/reviews/<yyyy-mm-dd>-bootstrap.md`，发现的格式同 `review.md`，另含「覆盖范围」一节：已读文档数与总数、已检查的方向、没有检查的方向。
+报告写入 `.kiro/project-spec/<仓库目录名>/reviews/<yyyy-mm-dd>-bootstrap.md`，发现的格式同 `review.md`，另含「覆盖范围」一节：已读文档数与总数、已检查的方向、没有检查的方向。
 
 ## 修改
 

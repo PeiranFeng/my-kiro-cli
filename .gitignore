@@ -4,3 +4,6 @@
 # 多 agent 本地通信消息，不纳入版本控制
 .kiro/agent-correspondence/messages/*.md
 .kiro/agent-correspondence/state/**/*.md
+
+# project-spec 工作产物
+.kiro/project-spec/

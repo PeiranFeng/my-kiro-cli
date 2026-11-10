@@ -216,7 +216,7 @@ verifies: ["req.<...>"]
 
 ## 一致性报告
 
-路径：`.project-spec/maintain-report.md`；bootstrap 发现的差异写入 `.project-spec/bootstrap-report.md`，格式相同。
+路径：`.kiro/project-spec/<仓库目录名>/maintain-report.md`；bootstrap 发现的差异写入 `.kiro/project-spec/<仓库目录名>/bootstrap-report.md`，格式相同。
 
 ```markdown
 # 一致性报告

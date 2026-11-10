@@ -1,6 +1,6 @@
 # review
 
-review 审查本 session 关心的设计或代码是否符合 `principles/` 中的原则，只写 `.project-spec/reviews/`。它不检查整个项目的一致性，那是 `maintain` 的职责。
+review 审查本 session 关心的设计或代码是否符合 `principles/` 中的原则，只写 `.kiro/project-spec/<仓库目录名>/reviews/`。它不检查整个项目的一致性，那是 `maintain` 的职责。
 
 ## 范围
 
@@ -20,6 +20,6 @@ review 审查本 session 关心的设计或代码是否符合 `principles/` 中�
 
 ## 输出
 
-报告写入 `.project-spec/reviews/<yyyy-mm-dd>-<scope>.md`，每条发现包含严重程度（blocking、important、suggestion）、原则（写成「ID [分层名] 名词短语」，分层名见 `principles/README.md`）、位置和证据。
+报告写入 `.kiro/project-spec/<仓库目录名>/reviews/<yyyy-mm-dd>-<scope>.md`，每条发现包含严重程度（blocking、important、suggestion）、原则（写成「ID [分层名] 名词短语」，分层名见 `principles/README.md`）、位置和证据。
 
 向用户只给简短反馈：各严重程度的数量，以及 blocking 和 important 发现各一句话；提到原则时同样用该格式，不只写 ID。review 不修复，也不阻塞流程。

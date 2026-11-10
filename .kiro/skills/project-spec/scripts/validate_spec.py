@@ -16,7 +16,7 @@ from gen_structure import STRUCTURE_SUFFIX, render_body, skeleton, split_frontma
 
 SPEC_VERSION = 2
 CONFIG_RELATIVE = "docs/project-spec.json"
-DEFAULT_REPORT = ".project-spec/validation.json"
+REPORTS_ROOT = Path(__file__).resolve().parents[3] / "project-spec"
 TREES = ("requirements", "architecture", "test-cases")
 JOURNEY_DIR = "journeys"
 README = "README.md"
@@ -701,6 +701,11 @@ def build_report(
     }
 
 
+def reports_dir(project_root: Path) -> Path:
+    """Where the work reports of ``project_root`` live: under the console's .kiro, never inside the repository."""
+    return REPORTS_ROOT / project_root.resolve().name
+
+
 def write_report(project_root: Path, report_path: str, report: Dict[str, Any]) -> None:
     if not _safe_relative(report_path):
         raise ValueError("--report 必须是 / 分隔的仓库相对路径")
@@ -712,7 +717,7 @@ def write_report(project_root: Path, report_path: str, report: Dict[str, Any]) -
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=".", help="目标仓库根目录")
-    parser.add_argument("--report", default=DEFAULT_REPORT, help="JSON 报告的仓库相对路径")
+    parser.add_argument("--report", default=None, help="JSON 报告的仓库相对路径；缺省写入 .kiro/project-spec/<仓库目录名>/validation.json")
     parser.add_argument("--json", action="store_true", help="在标准输出打印 JSON")
     args = parser.parse_args(argv)
 
@@ -735,7 +740,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for message in report["inconsistencies"]:
             print(f"INCONSISTENT: {message}")
     try:
-        write_report(project_root, args.report, report)
+        if args.report is None:
+            destination = reports_dir(project_root) / "validation.json"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        else:
+            write_report(project_root, args.report, report)
     except (OSError, ValueError) as exc:
         print(f"ERROR: 无法写入报告：{exc}", file=sys.stderr)
         return 2

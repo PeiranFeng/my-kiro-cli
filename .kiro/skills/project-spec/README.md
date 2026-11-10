@@ -23,9 +23,10 @@
 | `architecture [要求]` | 为已批准的需求设计架构，写 source 文档、结构文档和用例 |
 | `approve [范围]` | 批准 draft 文档；含「待确认」或校验错误的文档不会被批准 |
 | `build` | 按已批准的架构和用例写代码与测试 |
-| `maintain` | 检查整个项目的文档与实现是否一致，写 `.project-spec/maintain-report.md` |
+| `maintain` | 检查整个项目的文档与实现是否一致，写 `.kiro/project-spec/<仓库目录名>/maintain-report.md` |
 | `review [范围]` | 按原则审查本次设计或代码 |
 | `review bootstrap` | 审查 bootstrap 产出的文档是否忠实于代码与架构；bootstrap 结束时自动执行并修改一轮 |
+| `diagnose [模块]` | 基于文档快速列出项目悬而未决的问题，每条是创建 issue 的候选点；只读，不创建 issue |
 | `principle <描述>` | 新增、修改、删除或恢复开发原则 |
 
 不点名命令时，skill 按你的意图选择。
@@ -37,7 +38,7 @@
 | `docs/requirements/` | 按模块的功能点 | EARS 五种句式的原子条目 |
 | `docs/architecture/` | 镜像源码树，每个源文件两份文档 | source 文档写职责、决策、约束；结构文档列出类和函数 |
 | `docs/test-cases/` | 镜像架构树 | 声明式 Given、When、Then 场景 |
-| `.project-spec/` | 校验报告、检查报告、review 报告 | 加入 `.gitignore` |
+| `.kiro/project-spec/<仓库目录名>/`（控制台目录） | 校验报告、检查报告、review 报告 | 不进入目标仓库 |
 
 结构文档 `<文件名>.structure.md` 由脚本从代码生成，说明文字取自 docstring。格式细节和来源见 `references/templates.md`，目录约定见 `references/doc-layout.md`。
 
@@ -46,7 +47,7 @@
 `bootstrap` 只依据现有仓库，架构忠实反映代码现状，需求忠实抽象架构，不美化。需求是从实现推断的，不是你提出的，需要你审查时确认意图。
 
 - 结构文档由脚本从代码生成；source 文档、用例和需求由 Agent 依据代码和架构撰写。
-- 现状违反设计原则之处不改写进文档，记入 `.project-spec/bootstrap-report.md`。
+- 现状违反设计原则之处不改写进文档，记入 `.kiro/project-spec/<仓库目录名>/bootstrap-report.md`。
 - 结束时自动执行 `review bootstrap`：双向核对代码、架构、需求是否一致，并报告覆盖范围；文档与现状不符的发现会修改一轮，现状本身的问题只记入报告。规则见 `references/bootstrap-review.md`。
 - 你也可以随时单独运行 `review bootstrap`，再运行普通 `review` 评判现状的设计质量。
 
@@ -64,9 +65,10 @@
 
 | 脚本 | 作用 |
 |------|------|
-| `scripts/validate_spec.py --project-root <仓库>` | 校验文档结构、引用、需求句式，并核对 implemented 文档与代码 |
+| `scripts/validate_spec.py --project-root <仓库>` | 校验文档结构、引用、需求句式，并核对 implemented 文档与代码；报告默认写入控制台目录的 `.kiro/project-spec/<仓库目录名>/validation.json` |
 | `scripts/gen_structure.py --project-root <仓库> [--write]` | 列出或写入缺失、过期的结构文档，仅支持 Python 源码 |
 | `scripts/list_probes.py --project-root <仓库>` | 列出以字符串字面量指向仓库内函数或类的调用，供 `review bootstrap` 枚举能力探测 |
+| `scripts/collect_issues.py --project-root <仓库>` | 汇总文档「待确认」、报告条目、校验结果和测试缺口，供 `diagnose` 整理 |
 | `scripts/principle.py list｜check｜add｜update｜remove｜restore` | 管理原则文件 |
 
 ## 测试
@@ -85,6 +87,7 @@ python3 -m unittest discover -s tests
 | `references/build.md` | build 的步骤 |
 | `references/maintain.md` | maintain 的检查项 |
 | `references/review.md` | review 的范围、清单与输出 |
+| `references/diagnose.md` | `diagnose` 的来源、整理规则与输出 |
 | `references/bootstrap-review.md` | `review bootstrap` 的忠实性原则、方法与修改策略 |
 | `references/doc-layout.md` | 文档树、frontmatter、引用关系 |
 | `references/templates.md` | 各类文档骨架与格式来源 |

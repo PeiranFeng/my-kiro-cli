@@ -19,14 +19,15 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 | `architecture [要求]` | approved 的需求，可附自然语言要求 | 架构树和用例树（draft） | `references/docs-commands.md` |
 | `approve [scope]` | 默认全部 draft | 只改 status：draft → approved | `references/docs-commands.md` |
 | `build` | approved 的架构和用例 | 代码、测试，status：approved → implemented | `references/build.md` |
-| `maintain` | 全部文档与代码 | `.project-spec/maintain-report.md` | `references/maintain.md` |
-| `review [scope]` | 本 session 的 design 或 code | `.project-spec/reviews/` | `references/review.md` |
-| `review bootstrap` | `bootstrap` 产出的文档 | `.project-spec/reviews/`，并由 `bootstrap` 修改文档 | `references/bootstrap-review.md` |
+| `maintain` | 全部文档与代码 | `.kiro/project-spec/<仓库目录名>/maintain-report.md` | `references/maintain.md` |
+| `review [scope]` | 本 session 的 design 或 code | `.kiro/project-spec/<仓库目录名>/reviews/` | `references/review.md` |
+| `review bootstrap` | `bootstrap` 产出的文档 | `.kiro/project-spec/<仓库目录名>/reviews/`，并由 `bootstrap` 修改文档 | `references/bootstrap-review.md` |
+| `diagnose [模块]` | 项目文档与 `.kiro/project-spec/<仓库目录名>/` 报告 | 无，只列出悬而未决的问题 | `references/diagnose.md` |
 | `principle <描述>` | 用户要新增、修改、删除或恢复的原则 | `references/principles/<目录>/` | `references/principles/README.md` |
 
 `help` 读取 `README.md`，按用户关心的部分简短介绍命令、流程和自定义方式；再运行 `scripts/principle.py list --summary`，按分类列出现有原则（ID 名词短语：摘要）。不写任何文件，内容不在此重复。
 
-用户没有点名命令时按意图选择：询问功能或用法用 `help`；仓库还没有 `docs/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`；新增、修改、删除或恢复开发原则用 `principle`。
+用户没有点名命令时按意图选择：询问功能或用法用 `help`；仓库还没有 `docs/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`；要列出项目当前悬而未决的问题用 `diagnose`；新增、修改、删除或恢复开发原则用 `principle`。
 
 ## 状态与依赖
 
@@ -54,7 +55,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 <repo>/docs/requirements/       按模块组织的功能点
 <repo>/docs/architecture/       镜像源码树，一个公开源文件一个 source 文档和一个 structure 文档
 <repo>/docs/test-cases/         镜像架构树
-<repo>/.project-spec/           校验报告和检查报告，加入 .gitignore
+<console>/.kiro/project-spec/<仓库目录名>/   校验报告和检查报告，在控制台目录而不在目标仓库内
 ```
 
 - 结构规则见 `references/doc-layout.md`，文档骨架和格式来源见 `references/templates.md`，写文档前读取。
@@ -68,7 +69,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 2. 否则使用 `git rev-parse --show-toplevel`。
 3. 仍不能唯一确定时只询问目标路径。
 
-Skill 安装目录、用户主目录、上一次处理的仓库都不能成为隐式目标。涉及多个仓库时，每个仓库独立维护自己的 `docs/` 和 `.project-spec/`，文件引用不跨仓库。
+Skill 安装目录、用户主目录、上一次处理的仓库都不能成为隐式目标。涉及多个仓库时，每个仓库独立维护自己的 `docs/` 和 `.kiro/project-spec/<仓库目录名>/`，文件引用不跨仓库。
 
 ## 安全
 
@@ -82,7 +83,7 @@ Skill 安装目录、用户主目录、上一次处理的仓库都不能成为�
 <python> <本-Skill目录>/scripts/validate_spec.py --project-root <目标仓库>
 ```
 
-选择本机已有的 `python3`、`python` 或 Windows `py -3`，不安装依赖。报告写到 `.project-spec/validation.json`：
+选择本机已有的 `python3`、`python` 或 Windows `py -3`，不安装依赖。报告写到 `.kiro/project-spec/<仓库目录名>/validation.json`：
 
 - `errors`：文档结构或引用错误，退出码 1。不得为通过校验删除或弱化有效需求与用例。
 - `inconsistencies`：implemented 文档与代码对不上，供 `maintain` 使用。
