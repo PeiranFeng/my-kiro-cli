@@ -44,7 +44,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 
 ## 自动 review
 
-`requirements`、`architecture` 校验通过后，以及 `build` 完成后，各自动执行一次 `review`，只给用户简短反馈，不阻塞流程。
+`bootstrap`、`requirements`、`architecture` 校验通过后，以及 `build` 完成后，各自动执行一次 `review`，只给用户简短反馈，不阻塞流程。`bootstrap` 之后还要按 `references/docs-commands.md` 根据发现修改文档。
 
 ## 文档结构与原则
 

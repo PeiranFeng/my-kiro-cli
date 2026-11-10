@@ -19,13 +19,13 @@
 id: <前缀><编号>
 title: <名词短语>
 summary: <一句话摘要>
-stages: ["requirement", "design", "code", "test", "review"]
+stages: ["requirement", "design", "code", "test", "review", "bootstrap"]
 ---
 
 <原则正文。>
 ```
 
-- `stages` 取值：`requirement` 写需求时生效，`design` 写架构时生效，`code` 写生产代码时生效，`test` 写用例文档和自动化测试时生效，`review` 约束 review 本身的方法。
+- `stages` 取值：`requirement` 写需求时生效，`design` 写架构时生效，`code` 写生产代码时生效，`test` 写用例文档和自动化测试时生效，`review` 约束 review 本身的方法，`bootstrap` 只在 `bootstrap` 命令由现有代码提炼文档时生效。
 - `title` 是名词短语，`summary` 是一句话摘要，二者都是单行；`help` 与 `list --summary` 输出「ID 名词短语：摘要」。
 - 正文只写普适规则，不写具体例子。
 - 新增原则的编号取该前缀在目录和 `trash/` 中的最大编号加一，已删除的编号不会被复用。

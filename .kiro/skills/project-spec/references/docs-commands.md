@@ -16,12 +16,16 @@
 不接收自然语言，只依据当前仓库。方向与开发流程相反：代码 → 架构 → 需求。架构忠实还原代码现实，需求从架构抽象而来。
 
 1. 仓库没有 `docs/project-spec.json` 时，识别模块：每个承担独立职责的代码目录是一个模块。写入配置，在目标仓库 `.gitignore` 加入 `.project-spec/`。
-2. 运行校验，读取 `unmappedSources`：依据代码为每个公开源文件生成 source 文档，缺少的模块 README 一并生成。structure 文档不手写，运行 `scripts/gen_structure.py --project-root <目标仓库> --write` 生成。source 文档只陈述现有的职责、约束和代码中可确认的决策，候选方案无法从代码得知时省略该决策；现状违反设计原则之处不改写进文档，记入 `.project-spec/bootstrap-report.md`，由 review 判断。
+2. 运行校验，读取 `unmappedSources`：依据代码为每个公开源文件生成 source 文档，缺少的模块 README 一并生成。structure 文档不手写，运行 `scripts/gen_structure.py --project-root <目标仓库> --write` 生成。source 文档遵守 stage 含 `bootstrap` 的架构原则，只陈述现有的职责、约束和代码中可确认的决策；现状违反设计原则之处记入 `.project-spec/bootstrap-report.md`，由 review 判断。
 3. 为每个 source 文档写同路径 cases 文档：现有测试覆盖的接口，场景从测试归纳；没有现有测试的接口，在对应小节写明「无现有测试」，不虚构场景。
-4. 依据架构文档（不再直接读代码）抽象模块需求点，写入需求树；需求遵守 stage 含 `requirement` 的全部原则，只保留调用方可观察的行为，内部机制留在架构文档。需求是从实现推断的，不是用户提出的，`bootstrap-report.md` 记明这一点，由用户审查时确认意图。
+4. 依据架构文档（不再直接读代码）抽象模块需求点，写入需求树；需求遵守 stage 含 `requirement` 或 `bootstrap` 的需求原则，只保留调用方可观察的行为，内部机制留在架构文档。需求是从实现推断的，不是用户提出的，`bootstrap-report.md` 记明这一点，由用户审查时确认意图。
 5. 回填架构文档的 `requirements` 与 cases 文档的 `verifies`，把三棵树连通。
 6. 已有 approved 或 implemented 文档不覆盖。代码与它们不一致时，把差异写入 `bootstrap-report.md`，由用户决定改文档还是改代码。
 7. 新生成的文档全部为 `draft`。
+8. 校验通过后对本次生成的全部文档执行一次 `review` 自查，再按发现修改一轮并重新校验：
+   - 文档与现状不符的发现，修改文档使其忠实于现状。
+   - 现状违反设计原则的发现，不改文档也不改代码，记入 `bootstrap-report.md`。
+   - 只做这一轮修改，仍无法解决的问题记入 `bootstrap-report.md`。
 
 ## architecture [要求]
 
