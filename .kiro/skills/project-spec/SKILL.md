@@ -1,6 +1,6 @@
 ---
 name: project-spec
-description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构镜像的需求树、架构树和测试用例树，按已批准的架构开发代码，并检查文档与实现的一致性。当用户要求初始化 repo 文档、写或改需求、设计或改架构、批准文档、按文档开发、检查项目一致性、review 设计或代码、新增、修改、删除或恢复开发原则时使用。
+description: 把自然语言需求编译成本地文档根（~/data/docs/<仓库目录名>/<提交哈希>/）下与代码结构镜像的需求树、架构树和测试用例树，按已批准的架构开发代码，并检查文档与实现的一致性。当用户要求初始化 repo 文档、写或改需求、设计或改架构、批准文档、按文档开发、检查项目一致性、review 设计或代码、新增、修改、删除或恢复开发原则时使用。
 ---
 
 # project-spec
@@ -27,7 +27,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 
 `help` 读取 `README.md`，按用户关心的部分简短介绍命令、流程和自定义方式；再运行 `scripts/principle.py list --summary`，按分类列出现有原则（ID 名词短语：摘要）。不写任何文件，内容不在此重复。
 
-用户没有点名命令时按意图选择：询问功能或用法用 `help`；仓库还没有 `docs/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`；要列出项目当前悬而未决的问题用 `diagnose`；新增、修改、删除或恢复开发原则用 `principle`。
+用户没有点名命令时按意图选择：询问功能或用法用 `help`；仓库还没有 `<文档根>/project-spec.json` 或要求从代码整理文档用 `bootstrap`；描述要做什么用 `requirements`；要求设计实现方式用 `architecture`；表示批准用 `approve`；要求开发用 `build`；要求检查整个项目一致性用 `maintain`；要求审查本次工作用 `review`；要列出项目当前悬而未决的问题用 `diagnose`；新增、修改、删除或恢复开发原则用 `principle`。
 
 ## 状态与依赖
 
@@ -51,12 +51,14 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 ## 文档结构与原则
 
 ```text
-<repo>/docs/project-spec.json   模块到源码目录和测试目录的映射
-<repo>/docs/requirements/       按模块组织的功能点
-<repo>/docs/architecture/       镜像源码树，一个公开源文件一个 source 文档和一个 structure 文档
-<repo>/docs/test-cases/         镜像架构树
+<文档根>/project-spec.json   模块到源码目录和测试目录的映射
+<文档根>/requirements/       按模块组织的功能点
+<文档根>/architecture/       镜像源码树，一个公开源文件一个 source 文档和一个 structure 文档
+<文档根>/test-cases/         镜像架构树
 <console>/.kiro/project-spec/<仓库目录名>/   校验报告和检查报告，在控制台目录而不在目标仓库内
 ```
+
+- 文档根是 `~/data/docs/<仓库目录名>/<提交哈希>/`，一个提交一个目录，文档与目标仓库完全解耦，不写进仓库。`scripts/docs_cache.py resolve --project-root <目标仓库>` 报告当前提交的状态：`exact`（已有该提交的文档）、`incremental`（有祖先提交的文档可复用）、`none`。
 
 - 结构规则见 `references/doc-layout.md`，文档骨架和格式来源见 `references/templates.md`，写文档前读取。
 - structure 文档由 `scripts/gen_structure.py` 从代码生成：`--project-root <目标仓库>` 列出缺失或过期的文档，加 `--write` 写入。
@@ -69,7 +71,7 @@ description: 把自然语言需求编译成目标仓库 docs/ 下与代码结构
 2. 否则使用 `git rev-parse --show-toplevel`。
 3. 仍不能唯一确定时只询问目标路径。
 
-Skill 安装目录、用户主目录、上一次处理的仓库都不能成为隐式目标。涉及多个仓库时，每个仓库独立维护自己的 `docs/` 和 `.kiro/project-spec/<仓库目录名>/`，文件引用不跨仓库。
+Skill 安装目录、用户主目录、上一次处理的仓库都不能成为隐式目标。涉及多个仓库时，每个仓库独立维护自己的文档根和 `.kiro/project-spec/<仓库目录名>/`，文件引用不跨仓库。
 
 ## 安全
 
@@ -80,8 +82,10 @@ Skill 安装目录、用户主目录、上一次处理的仓库都不能成为�
 每次修改文档后运行：
 
 ```text
-<python> <本-Skill目录>/scripts/validate_spec.py --project-root <目标仓库>
+<python> <本-Skill目录>/scripts/validate_spec.py --project-root <目标仓库> [--docs-root <文档根>]
 ```
+
+`--docs-root` 缺省为当前 HEAD 对应的文档根。
 
 选择本机已有的 `python3`、`python` 或 Windows `py -3`，不安装依赖。报告写到 `.kiro/project-spec/<仓库目录名>/validation.json`：
 

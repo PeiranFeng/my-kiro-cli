@@ -12,10 +12,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from docs_cache import default_docs_root
 from gen_structure import STRUCTURE_SUFFIX, render_body, skeleton, split_frontmatter
 
 SPEC_VERSION = 2
-CONFIG_RELATIVE = "docs/project-spec.json"
+CONFIG_RELATIVE = "project-spec.json"
 REPORTS_ROOT = Path(__file__).resolve().parents[3] / "project-spec"
 TREES = ("requirements", "architecture", "test-cases")
 JOURNEY_DIR = "journeys"
@@ -106,7 +107,7 @@ class Doc:
 
     @property
     def display(self) -> str:
-        return f"docs/{self.tree}/{self.relative}"
+        return f"{self.tree}/{self.relative}"
 
     @property
     def parts(self) -> Tuple[str, ...]:
@@ -170,9 +171,9 @@ def _test_root(spec: Any, where: str, result: Result) -> Optional[TestRoot]:
     return TestRoot(tests, test_file) if valid else None
 
 
-def load_config(project_root: Path, result: Result) -> Config:
+def load_config(docs_root: Path, result: Result) -> Config:
     config = Config()
-    path = project_root / CONFIG_RELATIVE
+    path = docs_root / CONFIG_RELATIVE
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -300,15 +301,15 @@ def parse_document(path: Path, where: str, result: Result) -> Optional[Tuple[Dic
     return metadata, sections, lines[closing + 1 :]
 
 
-def load_tree(project_root: Path, tree: str, result: Result) -> List[Doc]:
-    root = project_root / "docs" / tree
+def load_tree(docs_root: Path, tree: str, result: Result) -> List[Doc]:
+    root = docs_root / tree
     if not root.is_dir():
-        result.error(f"docs/{tree}", "缺少必需目录")
+        result.error(tree, "缺少必需目录")
         return []
     docs: List[Doc] = []
     for path in sorted(root.rglob("*.md"), key=lambda item: item.as_posix()):
         relative = path.relative_to(root).as_posix()
-        parsed = parse_document(path, f"docs/{tree}/{relative}", result)
+        parsed = parse_document(path, f"{tree}/{relative}", result)
         if parsed is not None:
             docs.append(Doc(tree, relative, path, parsed[0], parsed[1], parsed[2]))
     return docs
@@ -524,11 +525,12 @@ def unmapped_sources(project_root: Path, architecture: List[Doc], config: Config
     return unmapped
 
 
-def validate_project(project_root: Path) -> Dict[str, Any]:
+def validate_project(project_root: Path, docs_root: Path) -> Dict[str, Any]:
     project_root = project_root.resolve()
     result = Result()
-    config = load_config(project_root, result)
-    trees = {tree: load_tree(project_root, tree, result) for tree in TREES}
+    docs_root = docs_root.resolve()
+    config = load_config(docs_root, result)
+    trees = {tree: load_tree(docs_root, tree, result) for tree in TREES}
     all_docs = [doc for tree in TREES for doc in trees[tree]]
 
     for doc in all_docs:
@@ -558,7 +560,7 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
     for module_name in config.modules:
         entry = arch_by_relative.get(f"{module_name}/{README}")
         if entry is None or entry.kind != "module":
-            result.error(f"docs/architecture/{module_name}", "模块缺少 kind 为 module 的 README.md")
+            result.error(f"architecture/{module_name}", "模块缺少 kind 为 module 的 README.md")
 
     def check_requirement_refs(doc: Doc, name: str, allowed: Optional[set] = None) -> None:
         module = _doc_module(doc)
@@ -640,7 +642,7 @@ def validate_project(project_root: Path) -> Dict[str, Any]:
 
     paths = check_code(project_root, all_docs, config, result)
     unmapped = unmapped_sources(project_root, trees["architecture"], config)
-    return build_report(project_root, all_docs, paths, unmapped, result)
+    return build_report(docs_root, all_docs, paths, unmapped, result)
 
 
 def _content_without_status(doc: Doc) -> bytes:
@@ -650,9 +652,9 @@ def _content_without_status(doc: Doc) -> bytes:
     return ("\n".join(kept) + "\n").encode("utf-8")
 
 
-def fingerprint(project_root: Path, docs: Sequence[Doc]) -> str:
+def fingerprint(docs_root: Path, docs: Sequence[Doc]) -> str:
     digest = hashlib.sha256()
-    config_path = project_root / CONFIG_RELATIVE
+    config_path = docs_root / CONFIG_RELATIVE
     digest.update(config_path.read_bytes() if config_path.is_file() else b"<missing>")
     digest.update(b"\0")
     for doc in sorted(docs, key=lambda item: (item.tree, item.relative)):
@@ -663,7 +665,7 @@ def fingerprint(project_root: Path, docs: Sequence[Doc]) -> str:
 
 
 def build_report(
-    project_root: Path,
+    docs_root: Path,
     docs: Sequence[Doc],
     paths: Dict[str, Dict[str, Optional[str]]],
     unmapped: List[str],
@@ -682,7 +684,7 @@ def build_report(
             sections.setdefault(section_id, doc.node_id)
     return {
         "specVersion": SPEC_VERSION,
-        "specFingerprint": fingerprint(project_root, docs),
+        "specFingerprint": fingerprint(docs_root, docs),
         "valid": not errors,
         "counts": {
             "documents": len(docs),
@@ -717,6 +719,7 @@ def write_report(project_root: Path, report_path: str, report: Dict[str, Any]) -
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=".", help="目标仓库根目录")
+    parser.add_argument("--docs-root", default=None, help="文档根目录；缺省为 ~/data/docs/<仓库目录名>/<HEAD 提交哈希>")
     parser.add_argument("--report", default=None, help="JSON 报告的仓库相对路径；缺省写入 .kiro/project-spec/<仓库目录名>/validation.json")
     parser.add_argument("--json", action="store_true", help="在标准输出打印 JSON")
     args = parser.parse_args(argv)
@@ -725,7 +728,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not project_root.is_dir():
         print(f"ERROR: 目标仓库目录不存在：{project_root}", file=sys.stderr)
         return 2
-    report = validate_project(project_root)
+    try:
+        docs_root = Path(args.docs_root) if args.docs_root else default_docs_root(project_root)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    report = validate_project(project_root, docs_root)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:

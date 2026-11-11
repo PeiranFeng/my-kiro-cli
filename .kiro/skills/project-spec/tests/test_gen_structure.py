@@ -108,42 +108,42 @@ class ProcessTests(unittest.TestCase):
         return self.root / "docs/architecture/data/loader.structure.md"
 
     def test_check_reports_missing_then_write_creates_then_check_passes(self) -> None:
-        self.assertEqual(process(self.root, write=False), ["docs/architecture/data/loader.structure.md: missing"])
+        self.assertEqual(process(self.root, self.root / "docs", write=False), ["architecture/data/loader.structure.md: missing"])
         self.assertFalse(self.doc().exists())
-        process(self.root, write=True)
+        process(self.root, self.root / "docs", write=True)
         text = self.doc().read_text(encoding="utf-8")
         self.assertTrue(text.startswith("---\nid: struct.data.loader\nkind: structure\nstatus: draft\n---\n\n# loader 结构"))
-        self.assertEqual(process(self.root, write=False), [])
+        self.assertEqual(process(self.root, self.root / "docs", write=False), [])
 
     def test_empty_modules_get_no_document(self) -> None:
-        process(self.root, write=True)
+        process(self.root, self.root / "docs", write=True)
         self.assertFalse((self.root / "docs/architecture/data/__init__.structure.md").exists())
 
     def test_empty_module_with_source_document_gets_structure_document(self) -> None:
         source_doc = self.root / "docs/architecture/data/__init__.md"
         source_doc.parent.mkdir(parents=True)
         source_doc.write_text("---\nid: arch.data.init\n---\n", encoding="utf-8")
-        process(self.root, write=True)
+        process(self.root, self.root / "docs", write=True)
         self.assertTrue((self.root / "docs/architecture/data/__init__.structure.md").is_file())
 
     def test_hand_written_descriptions_survive_when_structure_matches(self) -> None:
-        process(self.root, write=True)
+        process(self.root, self.root / "docs", write=True)
         edited = self.doc().read_text(encoding="utf-8").replace("Reads rows.", "Mine.")
         self.doc().write_text(edited, encoding="utf-8")
-        self.assertEqual(process(self.root, write=True), [])
+        self.assertEqual(process(self.root, self.root / "docs", write=True), [])
         self.assertIn("Mine.", self.doc().read_text(encoding="utf-8"))
 
     def test_stale_document_is_rewritten_and_keeps_frontmatter(self) -> None:
-        process(self.root, write=True)
+        process(self.root, self.root / "docs", write=True)
         self.doc().write_text(self.doc().read_text(encoding="utf-8").replace("status: draft", "status: approved") + "\nextra\n", encoding="utf-8")
-        self.assertEqual(process(self.root, write=True), ["docs/architecture/data/loader.structure.md: stale"])
+        self.assertEqual(process(self.root, self.root / "docs", write=True), ["architecture/data/loader.structure.md: stale"])
         text = self.doc().read_text(encoding="utf-8")
         self.assertIn("status: approved", text)
         self.assertNotIn("extra", text)
 
     def test_unparsable_source_is_reported(self) -> None:
         (self.root / "app/data/loader.py").write_text("def (:\n", encoding="utf-8")
-        problems = process(self.root, write=False)
+        problems = process(self.root, self.root / "docs", write=False)
         self.assertEqual(len(problems), 1)
         self.assertIn("无法解析", problems[0])
 

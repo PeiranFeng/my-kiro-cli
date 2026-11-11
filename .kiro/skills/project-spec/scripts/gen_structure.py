@@ -12,6 +12,8 @@ import tokenize
 from pathlib import Path, PurePosixPath
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from docs_cache import default_docs_root
+
 STRUCTURE_SUFFIX = ".structure.md"
 NO_DESCRIPTION = "(无说明)"
 COMMENT_TAIL = re.compile(r"\s{2}#\s.*$")
@@ -181,14 +183,14 @@ def split_frontmatter(text: str) -> Tuple[List[str], str]:
 
 
 def structure_relative(module: str, source_inner: PurePosixPath) -> str:
-    return PurePosixPath("docs", "architecture", module, source_inner.parent, source_inner.stem + STRUCTURE_SUFFIX).as_posix()
+    return PurePosixPath("architecture", module, source_inner.parent, source_inner.stem + STRUCTURE_SUFFIX).as_posix()
 
 
-def targets(project_root: Path) -> List[Tuple[str, str, Path, Path]]:
+def targets(project_root: Path, docs_root: Path) -> List[Tuple[str, str, Path, Path]]:
     from validate_spec import Result, load_config
 
     result = Result()
-    config = load_config(project_root, result)
+    config = load_config(docs_root, result)
     if result.errors:
         raise ValueError("; ".join(result.errors))
     items: List[Tuple[str, str, Path, Path]] = []
@@ -196,13 +198,13 @@ def targets(project_root: Path) -> List[Tuple[str, str, Path, Path]]:
         root = project_root / spec.source
         for path in sorted(root.rglob("*.py")) if root.is_dir() else []:
             inner = PurePosixPath(path.relative_to(root).as_posix())
-            items.append((module, inner.stem, path, project_root / structure_relative(module, inner)))
+            items.append((module, inner.stem, path, docs_root / structure_relative(module, inner)))
     return items
 
 
-def process(project_root: Path, write: bool) -> List[str]:
+def process(project_root: Path, docs_root: Path, write: bool) -> List[str]:
     problems: List[str] = []
-    for module, stem, source, doc in targets(project_root):
+    for module, stem, source, doc in targets(project_root, docs_root):
         text = source.read_text(encoding="utf-8")
         try:
             if not has_content(text) and not doc.with_name(doc.name[: -len(STRUCTURE_SUFFIX)] + ".md").is_file():
@@ -211,7 +213,7 @@ def process(project_root: Path, write: bool) -> List[str]:
         except SyntaxError as exc:
             problems.append(f"{source}: 无法解析：{exc.msg}")
             continue
-        relative = doc.relative_to(project_root).as_posix()
+        relative = doc.relative_to(docs_root).as_posix()
         if doc.is_file():
             head, current = split_frontmatter(doc.read_text(encoding="utf-8"))
             if skeleton(current) == skeleton(body):
@@ -231,6 +233,7 @@ def process(project_root: Path, write: bool) -> List[str]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=".", help="目标仓库根目录")
+    parser.add_argument("--docs-root", default=None, help="文档根目录；缺省为 ~/data/docs/<仓库目录名>/<HEAD 提交哈希>")
     parser.add_argument("--write", action="store_true", help="写入缺失或与代码不一致的结构文档")
     args = parser.parse_args(argv)
     root = Path(args.project_root).resolve()
@@ -238,7 +241,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"ERROR: 目标仓库目录不存在：{root}", file=sys.stderr)
         return 2
     try:
-        problems = process(root, args.write)
+        docs_root = Path(args.docs_root) if args.docs_root else default_docs_root(root)
+        problems = process(root, docs_root, args.write)
     except (OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

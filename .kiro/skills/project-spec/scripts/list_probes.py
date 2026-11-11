@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence, Set, Tuple
 
+from docs_cache import default_docs_root
+
 
 def defined_names(trees: Sequence[ast.AST]) -> Set[str]:
     names: Set[str] = set()
@@ -30,11 +32,11 @@ def call_name(node: ast.Call) -> str:
     return ast.unparse(node.func)
 
 
-def find(project_root: Path) -> List[Tuple[str, int, str, str]]:
+def find(project_root: Path, docs_root: Path) -> List[Tuple[str, int, str, str]]:
     from validate_spec import Result, load_config
 
     result = Result()
-    config = load_config(project_root, result)
+    config = load_config(docs_root, result)
     if result.errors:
         raise ValueError("; ".join(result.errors))
     parsed: List[Tuple[str, ast.AST]] = []
@@ -57,13 +59,15 @@ def find(project_root: Path) -> List[Tuple[str, int, str, str]]:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=".", help="目标仓库根目录")
+    parser.add_argument("--docs-root", default=None, help="文档根目录；缺省为 ~/data/docs/<仓库目录名>/<HEAD 提交哈希>")
     args = parser.parse_args(argv)
     root = Path(args.project_root).resolve()
     if not root.is_dir():
         print(f"ERROR: 目标仓库目录不存在：{root}", file=sys.stderr)
         return 2
     try:
-        for path, line, call, name in find(root):
+        docs_root = Path(args.docs_root) if args.docs_root else default_docs_root(root)
+        for path, line, call, name in find(root, docs_root):
             print(f"{path}:{line}\t{call}\t{name}")
     except (OSError, ValueError, SyntaxError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

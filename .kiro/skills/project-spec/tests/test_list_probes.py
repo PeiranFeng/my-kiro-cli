@@ -45,7 +45,7 @@ class ListProbesTests(unittest.TestCase):
             (root / "docs/project-spec.json").write_text(json.dumps(config), encoding="utf-8")
             (root / "app").mkdir()
             (root / "app/plugin.py").write_text(SOURCE, encoding="utf-8")
-            found = find(root)
+            found = find(root, root / "docs")
         self.assertEqual([(line, call, name) for _, line, call, name in found], [(12, "overrides", "render"), (13, "getattr", "render")])
 
 

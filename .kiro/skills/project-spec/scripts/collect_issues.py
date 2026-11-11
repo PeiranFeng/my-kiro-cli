@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from docs_cache import default_docs_root
 from validate_spec import reports_dir
 
 PENDING = "待确认"
@@ -37,16 +38,15 @@ def read_lines(path: Path) -> List[str]:
     return path.read_text(encoding="utf-8").splitlines()
 
 
-def collect(project_root: Path, reports: Optional[Path] = None) -> Dict[str, List[str]]:
+def collect(project_root: Path, docs: Path, reports: Optional[Path] = None) -> Dict[str, List[str]]:
     result: Dict[str, List[str]] = {"pending": [], "reports": [], "untested": [], "validation": []}
     reports = reports or reports_dir(project_root)
-    docs = project_root / "docs"
     for path in sorted(docs.rglob("*.md")) if docs.is_dir() else []:
-        relative = path.relative_to(project_root).as_posix()
+        relative = path.relative_to(docs).as_posix()
         lines = read_lines(path)
         result["pending"] += [f"{relative}：{text}" for section, text in bullets_under(lines) if section == PENDING]
         count = sum(1 for line in lines if NO_TEST in line)
-        if count and relative.startswith("docs/test-cases/"):
+        if count and relative.startswith("test-cases/"):
             result["untested"].append(f"{relative}：{count} 处标注「{NO_TEST}」")
     for name in REPORTS:
         path = reports / name
@@ -85,13 +85,15 @@ def render(result: Dict[str, List[str]]) -> str:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project-root", default=".", help="目标仓库根目录")
+    parser.add_argument("--docs-root", default=None, help="文档根目录；缺省为 ~/data/docs/<仓库目录名>/<HEAD 提交哈希>")
     args = parser.parse_args(argv)
     root = Path(args.project_root).resolve()
     if not root.is_dir():
         print(f"ERROR: 目标仓库目录不存在：{root}", file=sys.stderr)
         return 2
     try:
-        print(render(collect(root)), end="")
+        docs = Path(args.docs_root) if args.docs_root else default_docs_root(root)
+        print(render(collect(root, docs)), end="")
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2

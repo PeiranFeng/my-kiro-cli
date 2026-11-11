@@ -117,17 +117,17 @@ class ValidateSpecTests(unittest.TestCase):
         path.write_text(text.replace(old, new), encoding="utf-8")
 
     def assert_error(self, fragment: str) -> None:
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertFalse(report["valid"])
         self.assertTrue(any(fragment in item for item in report["errors"]), report["errors"])
 
     def assert_inconsistent(self, fragment: str) -> None:
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertTrue(report["valid"], report["errors"])
         self.assertTrue(any(fragment in item for item in report["inconsistencies"]), report["inconsistencies"])
 
     def test_consistent_spec_passes_and_maps_paths(self) -> None:
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertTrue(report["valid"], report["errors"])
         self.assertEqual(report["inconsistencies"], [])
         self.assertEqual(report["unmappedSources"], [])
@@ -147,7 +147,7 @@ class ValidateSpecTests(unittest.TestCase):
         self.edit("test-cases/data/loader.md", "status: implemented", "status: approved")
         (self.root / "app/data/loader.py").unlink()
         (self.root / "tests/data/test_loader.py").unlink()
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertTrue(report["valid"], report["errors"])
         self.assertEqual(report["inconsistencies"], [])
 
@@ -171,17 +171,17 @@ class ValidateSpecTests(unittest.TestCase):
         self.edit("requirements/model/fit.md", "status: implemented", "status: draft")
         self.edit("architecture/model/trainer.md", "status: implemented", "status: approved")
         self.assert_inconsistent("approved 文档依赖的需求")
-        self.assertEqual(validate_project(self.root)["drafts"], ["req.model.fit"])
+        self.assertEqual(validate_project(self.root, self.root / "docs")["drafts"], ["req.model.fit"])
 
     def test_draft_doc_may_reference_draft_requirement(self) -> None:
         self.edit("requirements/model/fit.md", "status: implemented", "status: draft")
         for relative in ("architecture/model/trainer.md", "test-cases/model/trainer.md"):
             self.edit(relative, "status: implemented", "status: draft")
-        self.assertTrue(validate_project(self.root)["valid"])
+        self.assertTrue(validate_project(self.root, self.root / "docs")["valid"])
 
     def test_approved_requirement_without_architecture_is_allowed(self) -> None:
         write_doc(self.root, "requirements/model/predict.md", {"id": "req.model.predict", "kind": "requirement", "status": "approved"}, REQUIREMENT_BODY)
-        self.assertTrue(validate_project(self.root)["valid"])
+        self.assertTrue(validate_project(self.root, self.root / "docs")["valid"])
 
     def test_implemented_requirement_without_architecture_fails(self) -> None:
         write_doc(self.root, "requirements/model/predict.md", node("req.model.predict", "requirement"))
@@ -189,12 +189,12 @@ class ValidateSpecTests(unittest.TestCase):
 
     def test_unmapped_source_is_listed(self) -> None:
         (self.root / "app/data/helper.py").write_text("", encoding="utf-8")
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertEqual(report["unmappedSources"], ["app/data/helper.py"])
 
     def test_invalid_status_and_removed_fields_fail(self) -> None:
         self.edit("architecture/data/loader.md", "status: implemented", "status: deprecated\norigin: explicit")
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertTrue(any("status 'deprecated' 无效" in item for item in report["errors"]))
         self.assertTrue(any("不允许字段 'origin'" in item for item in report["errors"]))
 
@@ -257,7 +257,7 @@ class ValidateSpecTests(unittest.TestCase):
 
     def test_section_id_in_fenced_code_is_ignored(self) -> None:
         self.edit("architecture/model/trainer.structure.md", "## fit {#api.model.trainer.fit}", "## fit {#api.model.trainer.fit}\n```\n## x {#api.model.trainer.x}\n```")
-        self.assertTrue(validate_project(self.root)["valid"])
+        self.assertTrue(validate_project(self.root, self.root / "docs")["valid"])
 
     def test_source_without_structure_document_fails(self) -> None:
         (self.root / "docs/architecture/model/trainer.structure.md").unlink()
@@ -277,13 +277,13 @@ class ValidateSpecTests(unittest.TestCase):
 
     def test_structure_descriptions_do_not_affect_consistency(self) -> None:
         self.edit("architecture/model/trainer.structure.md", "(无说明)", "手写说明")
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         self.assertEqual(report["inconsistencies"], [])
 
     def test_draft_structure_is_not_compared_with_code(self) -> None:
         self.edit("architecture/model/trainer.structure.md", "status: implemented", "status: draft")
         (self.root / "app/model/trainer.py").write_text("def fit(epochs):\n    pass\n", encoding="utf-8")
-        self.assertEqual(validate_project(self.root)["inconsistencies"], [])
+        self.assertEqual(validate_project(self.root, self.root / "docs")["inconsistencies"], [])
 
     def test_requirement_without_entries_fails(self) -> None:
         write_doc(self.root, "requirements/model/predict.md", node("req.model.predict", "requirement"), "")
@@ -321,17 +321,17 @@ class ValidateSpecTests(unittest.TestCase):
             )
         )
         write_doc(self.root, "requirements/model/fit.md", node("req.model.fit", "requirement"), body)
-        self.assertTrue(validate_project(self.root)["valid"])
+        self.assertTrue(validate_project(self.root, self.root / "docs")["valid"])
 
     def test_fingerprint_ignores_status_only(self) -> None:
-        first = validate_project(self.root)["specFingerprint"]
+        first = validate_project(self.root, self.root / "docs")["specFingerprint"]
         self.edit("architecture/data/loader.md", "status: implemented", "status: approved")
-        self.assertEqual(first, validate_project(self.root)["specFingerprint"])
+        self.assertEqual(first, validate_project(self.root, self.root / "docs")["specFingerprint"])
         self.edit("architecture/data/loader.md", "# 文档", "# 文档\n\n## 设计")
-        self.assertNotEqual(first, validate_project(self.root)["specFingerprint"])
+        self.assertNotEqual(first, validate_project(self.root, self.root / "docs")["specFingerprint"])
 
     def test_report_is_deterministic_and_stays_inside_root(self) -> None:
-        report = validate_project(self.root)
+        report = validate_project(self.root, self.root / "docs")
         write_report(self.root, ".project-spec/validation.json", report)
         loaded = json.loads((self.root / ".project-spec/validation.json").read_text(encoding="utf-8"))
         self.assertEqual(loaded, report)

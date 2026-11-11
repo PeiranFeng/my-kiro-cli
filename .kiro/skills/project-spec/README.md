@@ -1,6 +1,6 @@
 # project-spec 使用说明
 
-把自然语言需求变成目标仓库 `docs/` 下与代码镜像的文档，按已批准的文档开发代码，并持续检查文档与代码是否一致。你负责目标、取舍和验收语义，skill 负责把它们落成文档和代码。
+把自然语言需求变成与代码镜像的文档，文档存放在本地文档根 `~/data/docs/<仓库目录名>/<提交哈希>/`，不写进目标仓库，按已批准的文档开发代码，并持续检查文档与代码是否一致。你负责目标、取舍和验收语义，skill 负责把它们落成文档和代码。
 
 ## 工作流程
 
@@ -35,9 +35,9 @@
 
 | 目录 | 内容 | 格式 |
 |------|------|------|
-| `docs/requirements/` | 按模块的功能点 | EARS 五种句式的原子条目 |
-| `docs/architecture/` | 镜像源码树，每个源文件两份文档 | source 文档写职责、决策、约束；结构文档列出类和函数 |
-| `docs/test-cases/` | 镜像架构树 | 声明式 Given、When、Then 场景 |
+| `<文档根>/requirements/` | 按模块的功能点 | EARS 五种句式的原子条目 |
+| `<文档根>/architecture/` | 镜像源码树，每个源文件两份文档 | source 文档写职责、决策、约束；结构文档列出类和函数 |
+| `<文档根>/test-cases/` | 镜像架构树 | 声明式 Given、When、Then 场景 |
 | `.kiro/project-spec/<仓库目录名>/`（控制台目录） | 校验报告、检查报告、review 报告 | 不进入目标仓库 |
 
 结构文档 `<文件名>.structure.md` 由脚本从代码生成，说明文字取自 docstring。格式细节和来源见 `references/templates.md`，目录约定见 `references/doc-layout.md`。
@@ -48,6 +48,7 @@
 
 - 结构文档由脚本从代码生成；source 文档、用例和需求由 Agent 依据代码和架构撰写。
 - 现状违反设计原则之处不改写进文档，记入 `.kiro/project-spec/<仓库目录名>/bootstrap-report.md`。
+- 一个提交一个文档根。bootstrap 前先查是否已有该提交或其祖先提交的文档：有祖先提交时把它复制过来，用 git 取与现状的差异，只对差异做增量 bootstrap；已有该提交的文档则无需重做。
 - 结束时自动执行 `review bootstrap`：双向核对代码、架构、需求是否一致，并报告覆盖范围；文档与现状不符的发现会修改一轮，现状本身的问题只记入报告。规则见 `references/bootstrap-review.md`。
 - 你也可以随时单独运行 `review bootstrap`，再运行普通 `review` 评判现状的设计质量。
 
@@ -61,10 +62,11 @@
 
 ## 脚本
 
-脚本都只用 Python 标准库，路径相对本目录。
+脚本都只用 Python 标准库，路径相对本目录；除 `docs_cache.py` 外，涉及文档的脚本默认读写当前 HEAD 对应的文档根，可用 `--docs-root` 指定。
 
 | 脚本 | 作用 |
 |------|------|
+| `scripts/docs_cache.py resolve｜prepare --project-root <仓库>` | 报告当前提交的文档缓存状态；`prepare` 创建文档根，或从祖先提交复制并列出变更 |
 | `scripts/validate_spec.py --project-root <仓库>` | 校验文档结构、引用、需求句式，并核对 implemented 文档与代码；报告默认写入控制台目录的 `.kiro/project-spec/<仓库目录名>/validation.json` |
 | `scripts/gen_structure.py --project-root <仓库> [--write]` | 列出或写入缺失、过期的结构文档，仅支持 Python 源码 |
 | `scripts/list_probes.py --project-root <仓库>` | 列出以字符串字面量指向仓库内函数或类的调用，供 `review bootstrap` 枚举能力探测 |

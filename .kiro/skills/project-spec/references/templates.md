@@ -4,7 +4,7 @@ Agent 填充这些骨架。没有内容的段落直接删除，不保留空标�
 
 ## 功能点或约束
 
-路径：`docs/requirements/<module>/<feature>.md`，项目级放在 `docs/requirements/<feature>.md`。
+路径：`<文档根>/requirements/<module>/<feature>.md`，项目级放在 `<文档根>/requirements/<feature>.md`。
 
 ```markdown
 ---
@@ -38,7 +38,7 @@ status: draft
 
 ## 模块总览
 
-路径：`docs/architecture/<module>/README.md`。子目录总览把 `kind` 改为 `package`。
+路径：`<文档根>/architecture/<module>/README.md`。子目录总览把 `kind` 改为 `package`。
 
 ```markdown
 ---
@@ -66,7 +66,7 @@ depends-on: []
 
 ## 源文件
 
-路径：`docs/architecture/<module>/<path>/<stem>.md`，对应源文件 `<source>/<path>/<stem><suffix>`。
+路径：`<文档根>/architecture/<module>/<path>/<stem>.md`，对应源文件 `<source>/<path>/<stem><suffix>`。
 
 ```markdown
 ---
@@ -106,7 +106,7 @@ depends-on: []
 
 ## 结构文档
 
-路径：`docs/architecture/<module>/<path>/<stem>.structure.md`，与同路径的源文件文档并列。
+路径：`<文档根>/architecture/<module>/<path>/<stem>.structure.md`，与同路径的源文件文档并列。
 
 ````markdown
 ---
@@ -159,7 +159,7 @@ def <函数>(<参数>) -> <返回类型>  # <说明>
 
 ## 接口用例
 
-路径与源文件文档相同，位于 `docs/test-cases/` 下；对应测试文件由模块配置的 `testFile` 推出。
+路径与源文件文档相同，位于 `<文档根>/test-cases/` 下；对应测试文件由模块配置的 `testFile` 推出。
 
 ```markdown
 ---

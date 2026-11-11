@@ -1,10 +1,10 @@
 # 文档结构契约
 
-本文件所有路径都相对目标仓库根。
+文档不放在目标仓库里，而放在文档根 `~/data/docs/<仓库目录名>/<提交哈希>/`（下称 `<文档根>`），一个提交一个目录，与仓库完全解耦。本文件中的文档路径相对 `<文档根>`；配置里的 `source`、`tests` 和代码、测试路径相对目标仓库根。
 
 ## 模块配置
 
-`docs/project-spec.json` 声明模块与源码、测试目录的对应关系，是三棵树镜像代码的唯一依据：
+`<文档根>/project-spec.json` 声明模块与源码、测试目录的对应关系，是三棵树镜像代码的唯一依据：
 
 ```json
 {
@@ -26,16 +26,16 @@
 ## 三棵树
 
 ```text
-docs/requirements/
+requirements/
 ├── <feature>.md                    项目级功能点或约束
 └── <module>/<feature>.md           模块功能点
-docs/architecture/
+architecture/
 └── <module>/
     ├── README.md                   kind: module，对应 <source>/
     ├── <subdir>/README.md          kind: package，可选
     ├── <path>/<stem>.md            kind: source，对应 <source>/<path>/<stem><suffix>
     └── <path>/<stem>.structure.md  kind: structure，与同路径的 source 文档配对
-docs/test-cases/
+test-cases/
 ├── journeys/<name>.md              跨模块 journey，对应 <journeys.tests>/<testFile>
 └── <module>/
     ├── <path>/<stem>.md            kind: cases，对应 <tests>/<path>/<testFile>
@@ -44,10 +44,10 @@ docs/test-cases/
 
 - 需求只有项目级和模块级两层，文件名用小写 kebab-case，一个文件一个功能点或约束。
 - 架构树只为公开源文件建文档，文件名保持源文件名去掉后缀。
-- 每个模块必须有 `docs/architecture/<module>/README.md`。
+- 每个模块必须有 `architecture/<module>/README.md`。
 - 每个 source 文档必须有同路径的 structure 文档；structure 文档必须有同路径的 source 文档。
 - 含公开接口的 structure 文档必须有同路径的 cases 文档。
-- journey 放在其全部 targets 所在目录的最近公共目录下的 `journeys/`；公共目录为空时放在 `docs/test-cases/journeys/`。
+- journey 放在其全部 targets 所在目录的最近公共目录下的 `journeys/`；公共目录为空时放在 `test-cases/journeys/`。
 - `README.md` 只出现在架构树中。
 
 ## Frontmatter
