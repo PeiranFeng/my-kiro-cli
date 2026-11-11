@@ -120,7 +120,7 @@ work state 使用 `user-agents-correspond-state/v2`，至少包含任务需求�
 
 ## watch
 
-当前 session 用 `run_workflow` 启动 workflow：`workflowPath` 为 `agent://wf-coder`，`runLabel` 为 `watch-<work_id>`，输入 `prompt` 取自 [watch workflow prompt 模板](references/watch-workflow-prompt.md)，并把其中的 `<work_id>` 全部替换为当前 `work_id`。session 记下返回的 workflow ID 与 step session ID（可用 `inspect_workflow` 查到），用于发送控制指令。以下是模板规定的行为。
+当前 session 用 `run_workflow` 启动 workflow：`workflowPath` 为 `agent://wf-coder`，`modelId` 为 `qwen3-coder-next`，`runLabel` 为 `watch-<work_id>`，输入 `prompt` 取自 [watch workflow prompt 模板](references/watch-workflow-prompt.md)，并把其中的 `<work_id>` 全部替换为当前 `work_id`。session 记下返回的 workflow ID 与 step session ID（可用 `inspect_workflow` 查到），用于发送控制指令。以下是模板规定的行为。
 
 workflow 循环调用 `watch` 脚本，直到收到 `stop`：首次调用省略 `--cursor` 与 `--accepted-file`，之后每次传入内存中的 cursor 与全部 accepted_files；每次调用都传入新的 `--call-timestamp`。workflow 依据输出中的 `work` 对广播 event 做 AI 相关性判断。
 

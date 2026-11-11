@@ -27,7 +27,7 @@ description: 依据当前 session 正在进行的任务类型，在 steering 中
 /user-session-review 定时 [间隔秒数] [单次|严格]
 ```
 
-当前 session 用 `run_workflow` 启动一个简单的 workflow：`workflowPath` 为 `agent://wf-coder`，`runLabel` 为 `session-review-timer`，`prompt` 取自 [定时 workflow prompt 模板](references/timer-workflow-prompt.md)，把其中的 `<间隔秒数>` 与 `<模式>` 替换为调用参数。`<间隔秒数>` 省略时为 3600（一小时），`<模式>` 省略时为 `单次`。
+当前 session 用 `run_workflow` 启动一个简单的 workflow：`workflowPath` 为 `agent://wf-coder`，`modelId` 为 `qwen3-coder-next`，`runLabel` 为 `session-review-timer`，`prompt` 取自 [定时 workflow prompt 模板](references/timer-workflow-prompt.md)，把其中的 `<间隔秒数>` 与 `<模式>` 替换为调用参数。`<间隔秒数>` 省略时为 3600（一小时），`<模式>` 省略时为 `单次`。
 
 该 workflow 每隔 `<间隔秒数>` 向当前 session 发送一条 message，提醒按 `<模式>` 执行一次自查，消息中注明来源是 wf；当前 session 收到提醒后按对应模式执行。
 
