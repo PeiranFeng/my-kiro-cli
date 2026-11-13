@@ -47,12 +47,15 @@ uv run dbt build --target personal ...
 
 ## 远程长任务不阻塞本地 shell
 
+提交前先选仓库：`show warehouses` 看各仓库的 `running`/`queued`（计数含所有用户，不受查询历史可见范围限制）。`COMPUTE_WH` 的 `running` 已达其 `MAX_CONCURRENCY_LEVEL`（当前 8）或有 `queued` 时，改看 `SYSTEM$STREAMLIT_NOTEBOOK_WH`：它的 `running` 与 `queued` 都为 0 才在它上面运行，否则不占用他人任务的资源、等待其中一个仓库空出；两个仓库都空闲时用 `COMPUTE_WH`。改用该仓库时，`personal` target 的 `warehouse` 通过复制一份 `profiles.yml` 到测试目录并修改、以 `--profiles-dir` 指定，不改仓库内的 `profiles.yml`。
+
 提交到 Snowflake 执行的长任务（`dbt build`、`snow sql` 调用存储过程等），本地 shell 不阻塞等待其结束：
 
 - 以脱离当前 shell 的后台进程启动，启动时间、控制台输出、退出码分别写入仓库外测试目录下的文件。
 - 启动后短暂延迟，确认输出显示任务已开始提交，随即退出 shell。
 - 不终止该后台进程。
-- 之后的进度依据上述文件与查询历史判断，判断规则见下一节。
+- 结局由监控 workflow 回报，做法见 `user-run-experiment` skill 的「监控后台任务」。`dbt build` 日志已核对的正则：完成为 `Done\. PASS=`，错误为 ` ERROR |Database Error|Encountered an error`（节点失败行、结尾的错误明细、dbt 自身解析或启动失败）。测试失败行是 `FAIL <n>`，不放进错误正则，结束后按完成行的 `ERROR=` 计数与 `run_results.json` 判断。
+- 监控回报进程已退出（`watch_log.sh` 退出码 4）只说明本地 dbt 进程结束，远程是否仍在执行、是否成功按下一节判断。
 
 ## 长时 Python dbt 构建的中断与恢复
 
@@ -63,3 +66,5 @@ Python model 的 `dbt build` 会提交 Snowflake 存储过程调用。dbt 在该
 同一目标仍有 `RUNNING` 查询时，不启动第二次 `dbt build`。持续只读轮询该查询直到它进入终态，再从 `run_results.json` 或 Snowflake 查询历史判断成功或失败。历史运行时长只可用于安排观察，不可作为自动取消、重跑或判定卡死的阈值。
 
 取消查询会影响 Snowflake 上仍在执行的工作。自动化任务不得自行取消查询，必须先向用户展示待取消的完整 `QUERY_ID`、提交用户和角色，并取得明确确认。
+
+列出与取消用 `scripts/my_queries.sh`（本 skill 目录下）：`list` 列出当前用户 RUNNING/QUEUED/BLOCKED 的查询，`cancel <query_id>...` 只取消其中属于当前用户且仍在执行的，其余报告为未取消；默认仓库饱和时加 `--warehouse <仓库>`，因为 `INFORMATION_SCHEMA` 表函数本身也要占用仓库。同一个 dbt Python model 在查询历史中是同一 session 的三层：外层 `<model>__dbt_sp`、其中的存储过程 `CALL`、存储过程内部的结果查询，清理一个 model 时三者一起取消。

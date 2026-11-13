@@ -22,15 +22,40 @@ conda run -n $CONDA_ENV --no-capture-output bash ~/data/my-kiro-cli/run_exp/run.
 
 OVERRIDE 中每个参数必须确认存在于 `conf/` 下的 yaml，且使用从对应 config group 顶层开始的完整 Hydra 路径，不省略中间层级。seed 覆盖时该 key 已存在于配置中，直接赋值，不加 `+` 前缀（`+` 用于新增不存在的 key，加在已存在的 key 上会报重复 key 错误）。
 
-## 查看实验状态
+## 监控后台任务  {#watch-background-task}
 
-Kiro 无后台任务完成通知机制：任务结束不会主动告知 agent，也没有可对标 Claude Code monitor 的工具。判断"是否结束"只能主动探测，不要写脚本阻塞等待（阻塞等待等价于前台运行，失去后台的意义）：
+后台任务（实验、长测试、远程 dbt build 等）启动后，主 session 不轮询日志、不阻塞等待：由一个专用 workflow 监控日志，以 `send_message` 把结局回报主 session，主 session 收到通知后再读结果。
 
-```bash
-kill -0 "$(cat ~/data/test/<exp-dir>/run.pid)" 2>/dev/null && echo running || echo finished
+1. 启动：用 `run_exp/run.sh` 或 `run_exp/bg.sh`，输出只写 `<workdir>/run.log`，PID 写 `<workdir>/run.pid`；需要退出码的任务在命令末尾把退出码写入 `<workdir>/exit_code`。
+2. 定关键词：完成与错误的正则取自该类任务实际写入日志的文字，启动监控前用 `run_exp/watch_log.sh` 对该类任务的一份历史日志核对，完成、报错两种结局都能被识别后才使用；预期中的失败不放进错误正则。各类任务已核对的关键词记在对应 skill 中。
+3. 启动监控：`run_workflow`，`workflowPath` 为 `agent://wf-coder`，`runLabel` 为 `watch-<任务名>`，`inputs.prompt` 取下方模板并替换尖括号占位符。主 session 随即结束本轮回复。
+4. 收到通知后读 `run.log` 与结果文件；通知前需要临时查看时，用 `kill -0 "$(cat <workdir>/run.pid)"` 瞬时探测。
+
+`run_exp/watch_log.sh <log> <done 正则> <error 正则> <最长秒数> [pid 文件] [exit-code 文件]` 阻塞到结局确定，只打印决定结局的行（匹配前去掉 ANSI 颜色码，错误优先于完成）：
+
+| 退出码 | 结局 |
+|--------|------|
+| 0 | 完成正则命中；给出 exit-code 文件时附上其内容 |
+| 2 | 错误正则命中，打印至多 5 行 |
+| 3 | 最长秒数内未决出 |
+| 4 | pid 文件中的进程已退出且未命中完成正则（崩溃、OOM kill、信号终止） |
+
+监控 workflow 的 prompt 模板：
+
+```text
+Monitor a background task's log and report its outcome to the parent session. Do not read, edit or run anything else; do not touch any repository or remote service.
+
+Loop: run exactly
+  bash ~/data/my-kiro-cli/run_exp/watch_log.sh '<LOG>' '<DONE_REGEX>' '<ERROR_REGEX>' 1700 '<PID_FILE>' '<EXIT_CODE_FILE>'
+with a command timeout of 1750 seconds. On exit 3, run it again with no commentary; after <MAX_ROUNDS> consecutive exit-3 results, send_message to sessionId 'parent' with severity 'error' and message '<TASK>: no outcome after <MAX_ROUNDS> rounds'.
+
+On exit 0: send_message to sessionId 'parent' with severity 'success' and message '<TASK> finished: <printed lines>'.
+On exit 2: send_message to sessionId 'parent' with severity 'error' and message '<TASK> error: <printed lines>'.
+On exit 4: send_message to sessionId 'parent' with severity 'error' and message '<TASK> exited without finishing: <printed lines>'.
+Keep every message under 600 characters.
 ```
 
-这条命令瞬间返回、不占会话。何时探测由用户下一轮交互驱动。看结果读 `run.log`。进程被 OOM kill 或信号终止时不写 log 或标志文件，故判断结束以 `kill -0`（进程存活检查）为准，不靠 log/标志匹配。
+不需要的可选参数在模板中传空字符串 `''`。
 
 ## 停止实验
 

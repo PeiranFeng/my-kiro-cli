@@ -16,11 +16,7 @@ mkdir -p ~/data/test/<test-run-dir>
 bash ~/data/my-kiro-cli/run_exp/bg.sh ~/data/test/<test-run-dir> <完整测试命令，如 conda run -n $CONDA_ENV python -m pytest ...>
 ```
 
-Kiro 无后台任务完成通知机制，不写脚本阻塞等待（等价于前台运行）。查是否结束用主动探测，瞬间返回、不占会话；何时探测由用户下一轮交互驱动；看结果读 `run.log`：
-
-```bash
-kill -0 "$(cat ~/data/test/<test-run-dir>/run.pid)" 2>/dev/null && echo running || echo finished
-```
+启动后的结局监控见 `user-run-experiment` skill 的「监控后台任务」。
 
 ## 测试框架不可按目录预判
 
