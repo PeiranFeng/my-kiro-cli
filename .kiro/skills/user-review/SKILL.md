@@ -28,7 +28,7 @@ grep -rn '\[review\]' .kiro/steering/
 
 - 回复须简短明确。已按意见修改的回复 "Agreed, fixed."；不认可的回复 "Not an issue." 并一句话说明原因。
 - 回复位置必须与 comment 类型一致：inline comment 在对应 inline comment 下回复，top-level comment 在 top-level 下回复，禁止错位。
-- 引用原则时用语义标题或 slug 锚点，且在当前句给足上下文，不使用裸锚点（见 `10-communication.md#self-contained-refs`）。
+- 引用原则时用语义标题或 slug 锚点，且在当前句给足上下文，不使用裸锚点（见 `user-explain/principles/wording.md` 的"引用必须自明"）。
 
 ## 输出位置
 

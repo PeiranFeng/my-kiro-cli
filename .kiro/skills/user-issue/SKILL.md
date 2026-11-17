@@ -9,7 +9,7 @@ description: 拉取指定仓库和时间范围内的 GitHub Issue，逐条翻译
 
 ## Step 1 — 确认参数
 
-优先从用户指令和对话上下文推断参数，不铺选项询问（见 `00-collaboration.md#answer-dont-offer-options`）。
+优先从用户指令和对话上下文推断参数，不铺选项询问（见 `user-explain/principles/content.md` 的"直接回答"）。
 
 - 模式 A：用户直接给了 issue 编号列表（如 `#1335 #1366` 或 `1335,1366`）及仓库，则跳过其他条件，直接进入 Step 2。
 - 模式 B：未给编号列表，读取——仓库（用户未指定时须询问具体是哪个仓库，不默认处理全部）、时间范围（默认最近 7 天）、指派人 assignee（默认不限制）、发布者 author（默认不限制）。时间范围与 assignee/author 有默认值可直接采用，仓库这一项无法推断时必须直接问。
