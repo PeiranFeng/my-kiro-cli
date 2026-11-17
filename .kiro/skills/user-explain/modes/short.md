@@ -1,6 +1,6 @@
 # 模式：short
 
-简短回复。可与默认、`static`、`analysis` 组合。
+简短回复。由 AI 按 `principles/length.md` 判定进入，或由用户要求进入；用户说"再详细说说"时退出。可与默认、`static`、`analysis` 组合。
 
 ## 规则
 
