@@ -14,10 +14,10 @@
 
 | 规则 | 针对的问题 | 实测 |
 |---|---|---|
-| join 前确认两边的连接键唯一，或预期中的一对多倍数；不写无条件 join | join 膨胀：Join 的输出行数远大于输入 | scale floor 那条带 DISTINCT 与 self-join 的 SELECT 用了 223 s，原因待用 `query_profile.py` 确认 |
+| join 前确认两边的连接键唯一，或预期中的一对多倍数；不写无条件 join | join 膨胀：Join 的输出行数远大于输入 | |
 | join 条件写成等值；非等值条件放到 join 之后会让 join 先产生大结果再过滤 | 非等值 join 条件（官方 Join 算子说明） | |
-| 两边不相交时用 `UNION ALL`；只在需要去重时用 `UNION`，`DISTINCT`、`GROUP BY` 同理 | 多余的去重：UnionAll 上多一个 Aggregate | |
-| 中间结果大时缩小每次处理的范围（按 rule 或日期分批），或减少带入的列 | 溢出：bytes spilled to local / remote storage | |
+| 两边不相交时用 `UNION ALL`；只在需要去重时用 `UNION`，`DISTINCT`、`GROUP BY` 同理 | 多余的去重：UnionAll 上多一个 Aggregate；DISTINCT/GROUP BY 不减少行数 | preprocess_evaluate 的 timing scale floor SELECT（2026-11-16，#96 基线，算子统计在 `~/data/exp/timing-speed-optimization/raw/`）：223 s 中 DISTINCT 占 27%、自连接 24%、join 回原表 22%，而 351 列的 AVG 窗口只占 14%；timing 每个（股票, 日期）只有一行，DISTINCT 与自连接对它是多余的 |
+| 中间结果大时缩小每次处理的范围（按 rule 或日期分批），或减少带入的列 | 溢出：bytes spilled to local / remote storage | 同一条 SELECT：自连接与 join 回原表分别溢出 1.2 GB 与 4.4 GB |
 | 过滤条件直接写在被扫描的列上，不包函数，不用前导通配的 `LIKE` | 裁剪无效：partitions scanned 接近 total | |
 | 比较两张宽表时，先对每列算 `HASH_AGG(键, 列)`，只对哈希不同的列做 join | 宽表逐列 join：一列一次全表 join | `compare_tables.py`：一对 357 列、184 万行的表，扫描一遍即判定 198 列相同，3 对表共 37 s（2026-11-17） |
 | 只取需要的列，不写 `select *` 进 join 或聚合 | 列式存储下多读的列都要扫描 | |

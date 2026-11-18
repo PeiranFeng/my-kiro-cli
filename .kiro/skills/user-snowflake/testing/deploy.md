@@ -4,7 +4,13 @@
 
 ## 库的登记
 
-`deploy.sh` 按库登记打包命令、存储过程定义与 dbt 变量，目前只登记了 `preprocess_evaluate`。新增一个库（如 `evaluator_snowflake`、`feature_lab_weight`）时，先核对该库的打包脚本、`feature-lab` 中引用它的 `imports` 与变量名，以及该库的上传 CI，再在脚本里加一个分支；命名、构建、清理接口不需改动。
+`deploy.sh` 按库登记打包命令、存储过程定义与 dbt 变量，已登记的库及各自的打包入口见脚本头部。新增一个库（如 `feature_lab_weight`）时，先核对该库的打包脚本、`feature-lab` 中引用它的 `imports` 与变量名，以及该库的上传 CI，再在脚本里加一个分支；命名、构建、清理接口不需改动。
+
+### evaluator_snowflake
+
+- 打包方式与范围以被测 `feature-lab` commit 自身的 `python/evaluator_snowflake/packaging.py` 为准：`build_zip` 收该目录下全部 `.py`（排除 `__pycache__`），以 `evaluator_snowflake/` 为根写入 zip；这与 `feature-lab` 的 `deploy.yaml` 在 CI 中的调用相同，所以个人包与线上包同源同法。包内只依赖 `numpy`、`pandas`、`scipy`，由模型的 `packages=` 提供，不需要别的 zip。
+- 包从 `feature-lab` 打，tag 用 `FL_` 前缀，commit 取被测的 `feature-lab` rev；每个 tag、每个 commit 一个 zip，放在 `PYTHON_STAGE/evaluator_snowflake/<tag lower>/<hash>/`。
+- 没有存储过程：两个 evaluator 模型经 `dbt_project.yml` 的 `evaluator: +imports` 读 zip，它写死为 `@<db>.<target.schema>.PYTHON_STAGE/evaluator_snowflake.zip`，不经 `--vars`。构建时只改仓库外导出副本里这一行，指向 `deploy.sh` 打印的 `bundle` 路径；不往不带 tag 的默认路径上传。
 
 ## 规则
 

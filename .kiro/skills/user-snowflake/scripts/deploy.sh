@@ -2,11 +2,18 @@
 # Usage: deploy.sh <lib> <TAG> [<commit>]
 # Deploys one commit of a registered Python library to the personal schema, without checking it out:
 #   1. exports <commit> (default HEAD) of the library's repository with git archive;
-#   2. builds the bundle with the library's own build script, into ~/data/test/snowflake/<TAG>/deploy-<hash>/;
+#   2. builds the bundle with the library's own build script, into ~/data/test/snowflake/<TAG>/deploy-<lib>-<hash>/;
 #   3. uploads it to @FEATURELAB.DEV_<USER>.PYTHON_STAGE/<lib>/<tag lower>/<hash>/ and checks it landed;
-#   4. creates FEATURELAB.DEV_<USER>.<PROCEDURE PREFIX>_<TAG>_<HASH> importing it.
-# Prints "bundle <stage path>", "procedure <name>" and "vars <dbt --vars value>"; writes them to deploy.env too.
-# Registered libraries are the cases below; a new one needs its build command, procedure definition and dbt vars.
+#   4. for a library run through a stored procedure, creates FEATURELAB.DEV_<USER>.<PROCEDURE PREFIX>_<TAG>_<HASH>
+#      importing it.
+# Prints "commit <sha>" and "bundle <stage path>", plus "procedure <name>" and "vars <dbt --vars value>" for a
+# procedure library; writes them to deploy.env too.
+# Registered libraries:
+#   preprocess_evaluate  repo ~/data/preprocess_evaluate; scripts/build_bundle.py; procedure PREPROCESS_FACTORS_*.
+#   evaluator_snowflake  repo ~/data/feature-lab; python/evaluator_snowflake/packaging.py build_zip, the same call
+#                        as the Deploy workflow; no procedure. The models read it through the +imports config of
+#                        dbt_project.yml, so a build points +imports of its exported copy at the printed bundle.
+# A new library needs its build command, and its procedure definition and dbt vars if it has a procedure.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LIB="$1"; TAG="$2"; REV="${3:-HEAD}"
@@ -21,13 +28,17 @@ case "$LIB" in
     REPO="$HOME/data/preprocess_evaluate"
     PROCEDURE_PREFIX="PREPROCESS_FACTORS"
     ;;
-  *) echo "unregistered library: $LIB (registered: preprocess_evaluate)" >&2; exit 1 ;;
+  evaluator_snowflake)
+    REPO="$HOME/data/feature-lab"
+    PROCEDURE_PREFIX=""
+    ;;
+  *) echo "unregistered library: $LIB (registered: preprocess_evaluate, evaluator_snowflake)" >&2; exit 1 ;;
 esac
 
 HASH="$(git -C "$REPO" rev-parse --short=7 "$REV^{commit}")"
 HASH_UP="$(echo "$HASH" | tr '[:lower:]' '[:upper:]')"
 TAG_LOWER="$(echo "$TAG" | tr '[:upper:]' '[:lower:]')"
-LOCAL="$(python3 -B -c "import sys; sys.path.insert(0, '$HERE'); import test_tag; print(test_tag.local_dir('$TAG'))")/deploy-${HASH}"
+LOCAL="$(python3 -B -c "import sys; sys.path.insert(0, '$HERE'); import test_tag; print(test_tag.local_dir('$TAG'))")/deploy-${LIB}-${HASH}"
 STAGE_DIR="@FEATURELAB.${SCHEMA}.PYTHON_STAGE/${LIB}/${TAG_LOWER}/${HASH}"
 PROCEDURE="FEATURELAB.${SCHEMA}.${PROCEDURE_PREFIX}_${TAG}_${HASH_UP}"
 rm -rf "$LOCAL/src"; mkdir -p "$LOCAL/src"
@@ -54,17 +65,28 @@ IMPORTS = ('${BUNDLE}')
 EXECUTE AS CALLER"
     VARS="{preprocess_bundle: \"${BUNDLE}\", preprocess_procedure: \"${PROCEDURE}\"}"
     ;;
+  evaluator_snowflake)
+    BUNDLE_FILE="$LOCAL/evaluator_snowflake.zip"
+    # packaging.py is stdlib-only, so no conda environment is needed.
+    (cd "$LOCAL/src" && PYTHONPATH=python python3 -B -c \
+      'import sys; from evaluator_snowflake.packaging import build_zip; build_zip(sys.argv[1])' "$BUNDLE_FILE")
+    BUNDLE="${STAGE_DIR}/evaluator_snowflake.zip"
+    ;;
 esac
 
 # Without --overwrite, snow stage copy skips a file already at the path; the path is per commit, so overwriting is safe.
 COPY="$(snow stage copy -c "$C" --overwrite "$BUNDLE_FILE" "$STAGE_DIR")"
 echo "$COPY" | grep -q "UPLOADED" || { echo "upload not done:"; echo "$COPY"; exit 1; } >&2
-printf '%s;\n' "$DEFINITION" > "$LOCAL/create_procedure.sql"
-snow sql -c "$C" -f "$LOCAL/create_procedure.sql" >/dev/null
+if [ -n "$PROCEDURE_PREFIX" ]; then
+  printf '%s;\n' "$DEFINITION" > "$LOCAL/create_procedure.sql"
+  snow sql -c "$C" -f "$LOCAL/create_procedure.sql" >/dev/null
+fi
 rm -rf "$LOCAL/src"
 {
   echo "commit $(git -C "$REPO" rev-parse "$HASH")"
   echo "bundle $BUNDLE"
-  echo "procedure $PROCEDURE"
-  echo "vars $VARS"
+  if [ -n "$PROCEDURE_PREFIX" ]; then
+    echo "procedure $PROCEDURE"
+    echo "vars $VARS"
+  fi
 } | tee "$LOCAL/deploy.env"
