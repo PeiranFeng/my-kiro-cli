@@ -1,11 +1,13 @@
 # 线上 build 报错调查
 
-适用于 `FEATURELAB` 的 DEV/PROD 定时 build 或部署失败的排查。个人身份只能读，不能写 DEV/PROD，整个调查用只读查询和个人 schema 内的复现完成。
+适用于 `FEATURELAB` 的 DEV/PROD 定时 build 或部署失败的排查。整个调查用只读查询和个人 schema 内的复现完成；调查中不手动运行 DEV 任务，要运行时按 `operations/dev-task.md`。
 
 ## 1. 先拿到完整报错
 
 - 告警和 Snowsight 摘要里的报错会被截断，根因常常在被截掉的那一段（嵌套存储过程、UDTF 注册这类二层调用栈里）。只根据截断后的报错下结论容易归错原因。
-- 报错末尾提示的 `system$get_dbt_log('<query id>')` 只有 DEV/PROD dbt project 的 owner 能查。个人 role 以及 `FEATURELAB_DEV_READ`/`FEATURELAB_PROD_READ` 都会返回 "DBT project not found or access denied"。`snow` 会话是受限会话，不能执行 `USE ROLE`/`USE SECONDARY ROLES`。拿不到完整日志时，直接转到第 4 步复现。
+- 报错末尾提示的 `system$get_dbt_log('<query id>')` 返回那次 dbt 运行的完整日志。DEV 的日志个人 role 就能读；参数要用 `EXECUTE DBT PROJECT` 语句本身的 query id，可在 `INFORMATION_SCHEMA.QUERY_HISTORY` 中按 `query_text ilike '%execute dbt project%'` 和时间段找到，传任务的 query id 会报 "not found or access denied"（细节见 `knowledge/verified-facts.md`）。PROD 的日志个人 role 读不到，此时转到第 4 步复现。
+- DEV 任务的运行时间线与截断的报错，用 `scripts/dev_task.py status` 从 `TASK_HISTORY` 读（`dev_op` 连接，只读）。
+- `snow` 会话不能 `USE ROLE`，要用另一个角色就换连接（`SKILL.md` 的连接表）。
 
 ## 2. 用只读元数据判断各环境的影响范围
 

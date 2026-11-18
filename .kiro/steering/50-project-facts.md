@@ -53,9 +53,9 @@ inclusion: always
 
 连接与凭据在本机文件 `~/.config/snowflake/config.toml`（权限 600）——`~/.snowflake/` 不存在且 `SNOWFLAKE_HOME` 未设时，`snow` 读取该 XDG 路径。文件含明文口令与私钥路径：引用连接时只写连接名，禁止把其中的口令、私钥内容或其它取值复述进回复、仓库、steering、skill。
 
-连接名用 `-c` 显式指定，取值见 `.kiro/local-context.sh` 的 `SNOWFLAKE_CONNECTION`（该文件用途见 #local-context）。该连接的定义里没有 database 与 schema，故对象名一律写全限定形式（`<db>.<schema>.<object>`），不依赖会话上下文；warehouse 由账号级用户默认值提供，不在命令里指定。
+连接名用 `-c` 显式指定，取值见 `.kiro/local-context.sh`（该文件用途见 #local-context）：`SNOWFLAKE_CONNECTION` 是个人角色的连接，`SNOWFLAKE_CONNECTION_DEV_OP` 是只用于 DEV 任务的 `FEATURELAB_DEV_OP` 连接。两者的凭据都是限定角色的编程访问令牌，会话里不能 `USE ROLE`，换角色就换连接；何时用哪个见 `user-snowflake` skill 的 `SKILL.md`。该连接的定义里没有 database 与 schema，故对象名一律写全限定形式（`<db>.<schema>.<object>`），不依赖会话上下文；warehouse 由账号级用户默认值提供，不在命令里指定。
 
-个人工作区是 `FEATURELAB` 库下以本人名字命名的 `DEV_<name>` schema，与他人 schema 并列；跨出该 schema 的写操作先与用户确认。
+个人工作区是 `FEATURELAB` 库下以本人名字命名的 `DEV_<name>` schema，与他人 schema 并列；跨出该 schema 的写操作先与用户确认。DEV 默认只读，手动运行 DEV 任务要先调查后果、说明必要性并得到用户明确同意。
 
 ### preprocess_evaluate 的部署 stage  {#preprocess-evaluate-stage}
 

@@ -6,4 +6,5 @@
 - tag 指向测试服务的 PR、issue 或 commit，从当前任务推断：有 PR 用 PR，否则用 issue，都没有用 commit。推断出的 tag 与分支一起交用户确认（`testing/build.md`）。
 - 接口（`deploy.sh`、`preprocess_build.py`）自动按 tag 命名；接口之外的临时写入（快照表、比对表等）按 `test_tag.py` 的同一模式手工命名，本地文件放进该 tag 的本地目录。
 - `preprocess_build.py` 的上游快照命名为 `<上游表名>__<TAG>__S<时间>`（在 `DEV_<USER>`），每次 build 的输出 clone 命名为 `<层内表名>__<TAG>__B<时间>`（在 `DEV_<USER>_PREPROCESS`）；快照与 build 的记录在 tag 本地目录的 `snapshots/`、`runs/` 下，清理 tag 时一起删除。
+- 换连接或换场景前留下的交接记录写进 `notes/`（`SKILL.md` 的连接一节），与快照、build 记录同在 tag 本地目录下。
 - preprocess 层自身的 model 表与 view 名字由 dbt 决定、不带 tag，每次 build 覆盖；要保留某次的结果就 clone 成带 tag 的表。
