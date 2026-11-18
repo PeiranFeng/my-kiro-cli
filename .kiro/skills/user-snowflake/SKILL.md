@@ -20,7 +20,7 @@ description: FeatureLab 数仓（Snowflake + feature-lab dbt）的现状调查�
 | DEV/PROD 线上 build 或部署报错 | [incident/investigation.md](incident/investigation.md) | `deploy.sh` |
 | DEV 任务状态与历史；PR 合并后手动运行 DEV | [operations/dev-task.md](operations/dev-task.md) | `dev_task.py` |
 
-接口的用法、步骤与产物写在各脚本头部的 docstring 或注释里，调用前先读。skill 文档不抄写 model 清单、数据流等随分支变化的结构，需要时用 `layer_flow.py` 从对应 ref 生成。
+接口的用法、步骤与产物写在各脚本头部的 docstring 或注释里，调用前先读。新增或修改 `scripts/` 下的脚本（以及测试中临时写的驱动脚本）时，脚本发出的每条 SQL 都按 [sql/writing.md](sql/writing.md) 的写法规则与 `user-explain` skill 的 `domain/snowflake-performance.md` 所列的官方常见问题逐条自查，完成后在回复中逐条给出结论；规则未覆盖、但实测发现的低效写法，先补进 `sql/writing.md` 再写代码。skill 文档不抄写 model 清单、数据流等随分支变化的结构，需要时用 `layer_flow.py` 从对应 ref 生成。
 
 ## 连接
 

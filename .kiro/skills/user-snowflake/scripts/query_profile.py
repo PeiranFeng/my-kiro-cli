@@ -1,6 +1,6 @@
 """Summarize where one completed query spent its time, against the four common problems of Snowflake's Query Profile.
 
-Usage: python3 query_profile.py <query_id> [<query_id> ...]
+Usage: python3 query_profile.py [--warehouse <wh>] [--since <timestamp>] <query_id> [<query_id> ...]
 
 Per query it prints:
   - elapsed, queued, compilation and execution seconds (QUERY_HISTORY_BY_USER, last 7 days);
@@ -8,8 +8,17 @@ Per query it prints:
   - the four checks: Join output rows / input rows (exploding join), UnionAll under an Aggregate (UNION
     without ALL), bytes spilled to local and remote storage, TableScan partitions scanned / total (pruning).
 Operator statistics come from GET_QUERY_OPERATOR_STATS (completed queries of the last 14 days).
+
+All the given queries are fetched in two statements, one history lookup and one UNION ALL of operator stats, so the
+cost does not grow with the number of queries. --warehouse runs them on that warehouse: both are INFORMATION_SCHEMA
+table functions, which queue when the default warehouse is saturated. --since bounds the history lookup to queries
+ending after that timestamp instead of the user's whole 7-day history.
+
+As a library: fetch() returns the raw rows, format_report() renders one query from rows a caller already holds, and
+history_rows() / operator_rows() are the two statements, for callers that fetch with their own filters.
 """
 
+import argparse
 import json
 import re
 import sys
@@ -19,40 +28,60 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sf import sql  # noqa: E402
 
-
-def timing(query_id: str) -> dict | None:
-    rows = sql("select total_elapsed_time, queued_overload_time, queued_provisioning_time, compilation_time, "
-               "execution_time, warehouse_name, left(query_text, 100) q from table("
-               "FEATURELAB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER(RESULT_LIMIT => 10000)) "
-               f"where query_id = '{query_id}'")
-    return rows[0] if rows else None
+HISTORY_COLUMNS = ("query_id, session_id, start_time::varchar s, end_time::varchar e, total_elapsed_time, "
+                   "queued_overload_time, queued_provisioning_time, compilation_time, execution_time, "
+                   "warehouse_name, left(query_text, 100) q")
 
 
-def operators(query_id: str) -> list[dict]:
-    rows = sql("select step_id, operator_id, operator_type, parent_operators, operator_statistics, execution_time_breakdown, "
-               f"operator_attributes from table(get_query_operator_stats('{query_id}'))")
-    for r in rows:
-        for key in ("PARENT_OPERATORS", "OPERATOR_STATISTICS", "EXECUTION_TIME_BREAKDOWN", "OPERATOR_ATTRIBUTES"):
-            r[key] = json.loads(r[key]) if r[key] else None
-    # The function can return an operator more than once, and operator ids are unique within a step only.
-    unique = {}
-    for r in rows:
-        unique.setdefault((r["STEP_ID"], r["OPERATOR_ID"]), r)
-    for r in unique.values():
+def history_rows(where: str, since: str | None = None, warehouse: str | None = None) -> list[dict]:
+    """The current user's query history rows matching `where`, ending after `since` when given."""
+    bound = f"END_TIME_RANGE_START => '{since}'::timestamp_ltz, " if since else ""
+    return sql(f"select {HISTORY_COLUMNS} from table(FEATURELAB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER("
+               f"{bound}RESULT_LIMIT => 10000)) where {where}", warehouse=warehouse)
+
+
+def operator_rows(query_ids: list[str], warehouse: str | None = None) -> dict[str, list[dict]]:
+    """Every given query's operators, query id -> rows, in one statement; operator ids made unique across steps."""
+    for query_id in query_ids:
+        if not re.match(r"^[0-9a-f-]+$", query_id):
+            raise ValueError(f"not a query id: {query_id}")
+    result = {query_id: [] for query_id in query_ids}
+    if not query_ids:
+        return result
+    # GET_QUERY_OPERATOR_STATS takes a constant, so each query is its own UNION ALL branch.
+    branches = [f"select '{q}' as query_id, step_id, operator_id, operator_type, parent_operators, "
+                "operator_statistics, execution_time_breakdown, operator_attributes "
+                f"from table(get_query_operator_stats('{q}'))" for q in query_ids]
+    seen = set()
+    for r in sql("\nunion all\n".join(branches), warehouse=warehouse):
+        key = (r["QUERY_ID"], r["STEP_ID"], r["OPERATOR_ID"])
+        # The function can return an operator more than once, and operator ids are unique within a step only.
+        if key in seen:
+            continue
+        seen.add(key)
+        for column in ("PARENT_OPERATORS", "OPERATOR_STATISTICS", "EXECUTION_TIME_BREAKDOWN", "OPERATOR_ATTRIBUTES"):
+            r[column] = json.loads(r[column]) if r[column] else None
         r["OPERATOR_ID"] = f"{r['STEP_ID']}.{r['OPERATOR_ID']}"
         r["PARENT_OPERATORS"] = [f"{r['STEP_ID']}.{p}" for p in r["PARENT_OPERATORS"] or []]
-    return list(unique.values())
+        result[r["QUERY_ID"]].append(r)
+    return result
 
 
-def report(query_id: str) -> str:
+def fetch(query_ids: list[str], since: str | None = None, warehouse: str | None = None) -> tuple[dict, dict]:
+    """Return (query id -> history row, query id -> operator rows) for the given queries, in two statements."""
+    listed = ", ".join(f"'{q}'" for q in query_ids)
+    history = {r["QUERY_ID"]: r for r in history_rows(f"query_id in ({listed})", since, warehouse)}
+    return history, operator_rows(query_ids, warehouse)
+
+
+def format_report(query_id: str, t: dict | None, ops: list[dict]) -> str:
+    """Render one query's report from its history row (None when absent) and its operator rows."""
     lines = [f"== {query_id}"]
-    t = timing(query_id)
     if t:
         queued = (t["QUEUED_OVERLOAD_TIME"] + t["QUEUED_PROVISIONING_TIME"]) / 1000
         lines.append(f"elapsed {t['TOTAL_ELAPSED_TIME'] / 1000:.1f}s, queued {queued:.1f}s, compile "
                      f"{t['COMPILATION_TIME'] / 1000:.1f}s, execute {t['EXECUTION_TIME'] / 1000:.1f}s on "
                      f"{t['WAREHOUSE_NAME']}: {re.sub(r'\s+', ' ', t['Q'])}")
-    ops = operators(query_id)
     by_id = {o["OPERATOR_ID"]: o for o in ops}
     stats = {o["OPERATOR_ID"]: o["OPERATOR_STATISTICS"] or {} for o in ops}
     share = {o["OPERATOR_ID"]: (o["EXECUTION_TIME_BREAKDOWN"] or {}).get("overall_percentage", 0) for o in ops}
@@ -83,9 +112,19 @@ def report(query_id: str) -> str:
     return "\n".join(lines)
 
 
+def report(query_id: str, since: str | None = None, warehouse: str | None = None) -> str:
+    history, ops = fetch([query_id], since, warehouse)
+    return format_report(query_id, history.get(query_id), ops[query_id])
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or not all(re.match(r"^[0-9a-f-]+$", a) for a in sys.argv[1:]):
+    parser = argparse.ArgumentParser(usage=__doc__.split("\n\n")[1])
+    parser.add_argument("--warehouse")
+    parser.add_argument("--since")
+    parser.add_argument("query_ids", nargs="+")
+    args = parser.parse_args()
+    if not all(re.match(r"^[0-9a-f-]+$", a) for a in args.query_ids):
         print(__doc__, file=sys.stderr)
         sys.exit(1)
-    for query_id in sys.argv[1:]:
-        print(report(query_id), flush=True)
+    history, ops = fetch(args.query_ids, args.since, args.warehouse)
+    print("\n\n".join(format_report(q, history.get(q), ops[q]) for q in args.query_ids), flush=True)

@@ -62,6 +62,7 @@ PE = Path.home() / "data" / "preprocess_evaluate"
 LAYER = "models/preprocess/"
 FL_LAYER_PATHS = ["models/preprocess", "macros", "dbt_project.yml"]
 SPARE_WAREHOUSE = "SYSTEM$STREAMLIT_NOTEBOOK_WH"
+PROFILED = 5
 SIBLING = re.compile(r'sibling_relation\(\s*dbt\.this,\s*"([a-z0-9_]+)"')
 
 
@@ -143,9 +144,12 @@ def layer_tables(manifest: dict, project: Path) -> list[str]:
 # ---------------------------------------------------------------- warehouse, deploy
 
 def refuse_if_active():
+    """Refuse while the current user has active queries; the lookup is a table function, so it runs on the
+    warehouse pick_warehouse() chooses at this moment rather than queueing on a saturated default."""
     active = sf.sql("select count(*) as n from table(FEATURELAB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER("
                     "RESULT_LIMIT => 1000)) where execution_status in ('RUNNING', 'QUEUED', 'BLOCKED', "
-                    "'RESUMING_WAREHOUSE') and query_text not ilike '%query_history_by_user%'")[0]["N"]
+                    "'RESUMING_WAREHOUSE') and query_text not ilike '%query_history_by_user%'",
+                    warehouse=pick_warehouse())[0]["N"]
     if active:
         raise RuntimeError(f"{active} active queries of the current user; see my_queries.sh list")
 
@@ -177,18 +181,34 @@ def deploy(tag: str, pe_commit: str) -> dict:
 
 # ---------------------------------------------------------------- snapshots
 
+# SHOW COLUMNS reports FIXED and REAL where INFORMATION_SCHEMA.COLUMNS says NUMBER and FLOAT; recorded snapshots
+# hold the latter names, so they are kept. Other type names are the same in both.
+SHOW_TYPE_NAMES = {"FIXED": "NUMBER", "REAL": "FLOAT"}
+SHOW_ROW_CAP = 10000
+
+
+def show_columns(scope: str) -> list[dict]:
+    return sf.sql(f"show columns in {scope}")
+
+
 def columns(rels) -> dict[str, list[list[str]]]:
-    """Return each relation's (column, type) list, one INFORMATION_SCHEMA query per schema."""
+    """Return each relation's (column, type) list, with SHOW COLUMNS: metadata only, no warehouse, so it does not
+    queue. One statement per schema; a schema whose listing reaches SHOW's row cap is read table by table instead.
+    Columns come in ordinal order (checked 2026-11-18); were it ever otherwise, fits() would only take a new snapshot."""
     result = {rel: [] for rel in rels}
     by_schema = {}
     for rel in rels:
         db, schema, name = rel.split(".")
         by_schema.setdefault((db, schema), []).append(name)
     for (db, schema), names in by_schema.items():
-        listed = ", ".join(f"'{n}'" for n in names)
-        for r in sf.sql(f"select table_name, column_name, data_type from {db}.INFORMATION_SCHEMA.COLUMNS "
-                        f"where table_schema = '{schema}' and table_name in ({listed}) order by table_name, ordinal_position"):
-            result[f"{db}.{schema}.{r['TABLE_NAME']}"].append([r["COLUMN_NAME"], r["DATA_TYPE"]])
+        rows = show_columns(f"schema {db}.{schema}")
+        if len(rows) >= SHOW_ROW_CAP:
+            rows = [r for name in names for r in show_columns(f"table {db}.{schema}.{sf.quote(name)}")]
+        wanted = set(names)
+        for r in rows:
+            if r["table_name"] in wanted:
+                kind = json.loads(r["data_type"])["type"]
+                result[f"{db}.{schema}.{r['table_name']}"].append([r["column_name"], SHOW_TYPE_NAMES.get(kind, kind)])
     return result
 
 
@@ -257,26 +277,22 @@ def rewrite_state(manifest: dict, snapshot: dict, target: Path):
 
 # ---------------------------------------------------------------- timings
 
-def handler_seconds(query_ids: list[str]) -> float:
-    """Sum the Python UDF/UDTF handler execution time of the given queries' operators."""
+def handler_seconds(ops: list[dict]) -> float:
+    """Sum the Python UDF/UDTF handler execution time over one query's operator rows."""
     total = 0.0
-    for query_id in query_ids:
-        for r in sf.sql(f"select operator_statistics:extension_functions as e from table(get_query_operator_stats('{query_id}')) "
-                        "where operator_statistics:extension_functions is not null"):
-            # Observed keys: python_udtf_{__init__,process,end_partition}_execution_time and their avg_ twins, in ms.
-            stats = json.loads(r["E"])
-            total += sum(float(v) for k, v in stats.items() if k.startswith("python_") and k.endswith("_execution_time"))
+    for o in ops:
+        # Observed keys: python_udtf_{__init__,process,end_partition}_execution_time and their avg_ twins, in ms.
+        stats = (o["OPERATOR_STATISTICS"] or {}).get("extension_functions") or {}
+        total += sum(float(v) for k, v in stats.items() if k.startswith("python_") and k.endswith("_execution_time"))
     return total / 1000
 
 
-def model_timings(run_results: dict, started: str) -> tuple[dict, list]:
-    """Return each model's elapsed, queued and Python handler seconds, and its session's queries over 1 s."""
-    history = sf.sql(
-        "select query_id, session_id, start_time::varchar s, end_time::varchar e, total_elapsed_time, "
-        "execution_time, queued_overload_time from table(FEATURELAB.INFORMATION_SCHEMA.QUERY_HISTORY_BY_USER("
-        f"END_TIME_RANGE_START => '{started}'::timestamp_ltz, RESULT_LIMIT => 10000))")
+def model_timings(run_results: dict, started: str, warehouse: str | None = None) -> tuple[dict, list, str]:
+    """Return each model's elapsed, queued and Python handler seconds, its session's queries over 1 s slowest first,
+    and the profile report of the `PROFILED` slowest; two statements in all, run on `warehouse`."""
+    history = query_profile.history_rows("true", started, warehouse)
     by_id = {r["QUERY_ID"]: r for r in history}
-    timings, heavy_all = {}, []
+    sessions = {}
     for result in run_results["results"]:
         if not result["unique_id"].startswith("model."):
             continue
@@ -284,14 +300,19 @@ def model_timings(run_results: dict, started: str) -> tuple[dict, list]:
         if outer is None:
             continue
         inner = [r for r in history if r["SESSION_ID"] == outer["SESSION_ID"] and outer["S"] <= r["S"] <= outer["E"]]
+        heavy = [r for r in inner if r["EXECUTION_TIME"] > 1000 and r["QUERY_ID"] != outer["QUERY_ID"]]
+        sessions[result["unique_id"].split(".")[-1]] = (outer, inner, heavy)
+    heavy_all = sorted((r for _, _, heavy in sessions.values() for r in heavy), key=lambda r: -r["EXECUTION_TIME"])
+    ops = query_profile.operator_rows([r["QUERY_ID"] for r in heavy_all], warehouse)
+    timings = {}
+    for model, (outer, inner, heavy) in sessions.items():
         elapsed = outer["TOTAL_ELAPSED_TIME"] / 1000
         queued = sum(r["QUEUED_OVERLOAD_TIME"] for r in inner) / 1000
-        heavy = [r for r in inner if r["EXECUTION_TIME"] > 1000 and r["QUERY_ID"] != outer["QUERY_ID"]]
-        heavy_all += [(r["EXECUTION_TIME"], r["QUERY_ID"]) for r in heavy]
-        timings[result["unique_id"].split(".")[-1]] = {
-            "elapsed": elapsed, "queued": queued, "net": elapsed - queued,
-            "udtf_handler": handler_seconds([r["QUERY_ID"] for r in heavy])}
-    return timings, [q for _, q in sorted(heavy_all, reverse=True)]
+        timings[model] = {"elapsed": elapsed, "queued": queued, "net": elapsed - queued,
+                          "udtf_handler": sum(handler_seconds(ops[r["QUERY_ID"]]) for r in heavy)}
+    slow = [r["QUERY_ID"] for r in heavy_all]
+    profile = "\n\n".join(query_profile.format_report(q, by_id[q], ops[q]) for q in slow[:PROFILED])
+    return timings, slow, profile
 
 
 def wall_clock(run_results: dict) -> float:
@@ -345,16 +366,16 @@ def build(tag: str, fl_rev: str, pe_rev: str, upstream: str, sid: str | None, wo
     record["clones"] = {t: test_tag.table_name(t, tag, build_id) for t in tables if t in existing}
     sf.sql(";\n".join(f"create transient table FEATURELAB.{sf.PREPROCESS_SCHEMA}.{c} "
                       f"clone FEATURELAB.{sf.PREPROCESS_SCHEMA}.{t}" for t, c in record["clones"].items()))
-    record["timings"], slow = model_timings(results, record["started"])
+    record["timings"], slow, profile = model_timings(results, record["started"], record["warehouse"])
     record["wall_clock"] = wall_clock(results)
     (run_dir / "run.json").write_text(json.dumps(record, indent=1))
-    (run_dir / "profile.txt").write_text("\n\n".join(query_profile.report(q) for q in slow[:5]) + "\n")
+    (run_dir / "profile.txt").write_text(profile + "\n")
     lines = [f"build {build_id}: feature-lab {fl_commit[:7]}, preprocess_evaluate {pe_commit[:7]}, "
              f"snapshot {snapshot['id']}, warehouse {record['warehouse']}, {record['started']} to {record['ended']}",
              f"layer wall clock {record['wall_clock']:.0f} s; failed tests {record['failed_tests']}",
              "per model, elapsed - queued:"]
     lines += [f"  {m}: {t['net']:.0f} s" for m, t in sorted(record["timings"].items(), key=lambda kv: -kv[1]["net"])]
-    lines.append(f"profiles of the {min(5, len(slow))} slowest queries: {run_dir / 'profile.txt'}")
+    lines.append(f"profiles of the {min(PROFILED, len(slow))} slowest queries: {run_dir / 'profile.txt'}")
     (run_dir / "summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)
     log(f"BUILD DONE {build_id}")
