@@ -59,7 +59,7 @@ inclusion: always
 
 ### preprocess_evaluate 的部署 stage  {#preprocess-evaluate-stage}
 
-`preprocess_evaluate` 打包后的 zip（`scripts/build_bundle.py` 产出）引用位置是 `FEATURELAB.PUBLIC.FEATURE_LAB_PYTHON_STAGE`（`feature-lab` 仓库 `models/preprocess/*.py` 的 `imports=` 字段引用该路径下的 `preprocess_evaluate.zip`）。该仓库 `.github/workflows/snowflake-upload.yaml` 已接入 CI，push 到 `main`/`develop` 时自动打包上传到这个共享路径；**正式开发和生产环境已禁止手动上传到这个共享路径**，更新只能通过 push 触发 CI。个人在自己 `DEV_<name>` schema 下的 `PYTHON_STAGE` 手动上传 zip 不受此限制，相关操作规范见 `user-snowflake` skill 的 `python-stage-upload.md`。
+`preprocess_evaluate` 打包后的 zip（`scripts/build_bundle.py` 产出）引用位置是 `FEATURELAB.PUBLIC.FEATURE_LAB_PYTHON_STAGE`（`feature-lab` 仓库 `models/preprocess/*.py` 的 `imports=` 字段引用该路径下的 `preprocess_evaluate.zip`）。该仓库 `.github/workflows/snowflake-upload.yaml` 已接入 CI，push 到 `main`/`develop` 时自动打包上传到这个共享路径；**正式开发和生产环境已禁止手动上传到这个共享路径**，更新只能通过 push 触发 CI。个人在自己 `DEV_<name>` schema 下的 `PYTHON_STAGE` 手动上传 zip 不受此限制，相关操作规范见 `user-snowflake` skill 的 `testing/deploy.md`。
 
 `DEV_PREPROCESS` schema 存放的是 dbt 构建出的 mart 层表/视图（`fact_stock_factor_*`、`fact_pool_weight_source` 等，定义见 `feature-lab` 仓库 `models/preprocess/`），不存放 zip，与上述 stage 是两个不相关的对象。
 

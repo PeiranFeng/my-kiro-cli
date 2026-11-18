@@ -21,10 +21,14 @@
 
 ## 4. 在个人 schema 复现
 
-- 共享 stage `FEATURELAB.PUBLIC.FEATURE_LAB_PYTHON_STAGE` 和环境 stage 个人都不能读，所以在仓库外用 `git archive <commit> | tar -x` 导出可疑 commit，再按 `python-stage-upload.md` 打包，上传到个人 `PYTHON_STAGE`，并建一个带 hash 后缀的存储过程。
-- `snow stage copy` 默认不覆盖：目标路径已有同名文件时，状态显示 `SKIPPED`，stage 上留的还是旧文件。上传后检查状态列，出现 `SKIPPED` 就换一个新路径重新上传，否则复现跑的不是目标 commit。
+- 共享 stage 和环境 stage 个人都不能读，所以用 `scripts/deploy.sh <lib> <TAG> <可疑 commit>` 把该 commit 部署到个人 schema（`testing/deploy.md`），tag 用调查对应的 issue 或 commit（`testing/naming.md`）。
 - 复现时直接 `CALL` 个人过程，参数照抄线上 model 的调用参数（配置名、rule、stage），输入表用 DEV 的上游表（`FEATURELAB_DEV_READ` 可读）。这样不用跑 dbt 就能复现单个失败的调用，拿到完整报错。
 - 复现得到的调用栈要和线上报错逐行比对，文件名和行号都一致才能认定是同一个问题。
+- 报错在 dbt 层面（单个 model 或 unit test）时，用 defer 只执行出错的那一个，上游只读线上表（通用写法见 `testing/build.md`），另需注意：
+  - manifest 的 target 决定上游读哪个环境：复现 DEV 的报错用 `dbt parse --target dev`，PROD 同理。
+  - dbt-core 版本与线上一致（`knowledge/verified-facts.md` 的 dbt 一节），manifest 用同一版本 parse。
+  - 复现合并后的代码：`git fetch` 后 `git archive origin/<分支> | tar -x -C <tag 本地目录>`，在导出目录里执行，不在开发分支的工作树里跑。
+  - 用 `sibling_relation` 拼表名的 preprocess Python model 不能 defer（`survey/preprocess-layer.md`）。
 
 ## 5. 定位引入变更
 
@@ -37,4 +41,4 @@
 - 结论里分开写两类：复现直接证实的，和从时间线或元数据推断的。推断的部分要说明依据。
 - 本地 Snowpark 测试不会真的在 Snowflake 上建对象，所以 UDF/UDTF/存储过程的定义长度、签名之类的目录限制只会在真实 warehouse 里报错。这类问题的修复要附一次个人 schema 的真实调用作为验证。
 - 修复只能走 git 推送触发 CI（见 `50-project-facts.md#preprocess-evaluate-stage`）。PROD 要等下一次 Deploy 把新包复制过去才会恢复，修复说明里写清楚这一点。
-- 调查结束后，告诉用户在个人 schema 里留下的临时过程和 stage 文件，由用户决定是否清理。
+- 调查结束后，用 `scripts/personal_schema_clean.py clean <TAG>` 列出留下的对象与本地目录，由用户决定是否清理（`testing/clean.md`）。

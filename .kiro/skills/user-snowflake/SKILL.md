@@ -1,60 +1,40 @@
 ---
 name: user-snowflake
-description: Snowflake CLI 查询与 stage 操作，以及 FeatureLab dbt、个人 schema 测试、本地编译和个人 Python bundle 发布的按需工作流入口。用户要求这些操作或相关规范时使用。
+description: FeatureLab 数仓（Snowflake + feature-lab dbt）的现状调查、Snowflake 知识与构建者规范、临时 SQL 与高性能 SQL 编写、个人 schema 上的代码部署与数据验证、个人 schema 清理、线上报错调查。用户要求这些操作或相关规范时使用。
 ---
 
 # user-snowflake
 
-访问入口、连接配置位置、认证限制见 `50-project-facts.md#snowflake`。
+访问入口、连接配置位置、认证限制、`preprocess_evaluate` 的共享 stage 见 `50-project-facts.md#snowflake`。
 
-## 按需数仓背景
+## 按场景进入
 
-- FeatureLab dbt 开发工作流、权限、评审、验收和 DEV migration：读取 [snowflake-guide.md](snowflake-guide.md) 的相关标题；涉及当前仓库状态时同时核对 `feature-lab` 代码。
-- 个人 schema 使用 PROD 数据测试：读取 [personal-schema-testing.md](personal-schema-testing.md)。
-- 本地编译或执行 dbt：读取 [local-dbt-compile.md](local-dbt-compile.md)。
-- 个人 `PYTHON_STAGE` 上传 zip 或确认 zip 对应 commit：读取 [python-stage-upload.md](python-stage-upload.md)。
-- preprocess 因子 source、物化 schema、上游 relation 或因子列数：读取 [preprocess-factor-lineage.md](preprocess-factor-lineage.md)。
-- DEV/PROD 线上 build 或部署报错调查：读取 [production-bug-investigation.md](production-bug-investigation.md)。
-- 新增因子接入：只调整 `models/preprocess/all_calday_stock_feature.sql`，将新因子表的键并入 spine 并 left join 到该模型；该模型按日历日汇总标准化处理前的所有原始因子，`fact_stock_factor_source` 是其交易日过滤 view，无需改动。
+| 场景 | 先读 | 接口（`scripts/`） |
+|---|---|---|
+| 线上各 schema 的组织结构、数据量级、依赖关系 | [survey/method.md](survey/method.md)；preprocess 层另读 [survey/preprocess-layer.md](survey/preprocess-layer.md) | `schema_survey.py`、`layer_flow.py` |
+| Snowflake 知识、构建者推荐的用法 | [knowledge/snowflake-guide.md](knowledge/snowflake-guide.md)（构建者规范）、[knowledge/verified-facts.md](knowledge/verified-facts.md)（本项目实测） | — |
+| 临时 SQL、编写或优化 SQL | [sql/writing.md](sql/writing.md)、[sql/verify.md](sql/verify.md) | `query_profile.py`、`my_queries.sh` |
+| 临时部署代码到个人 schema | [testing/naming.md](testing/naming.md)、[testing/deploy.md](testing/deploy.md) | `deploy.sh` |
+| 个人 schema 上的数据验证（一致性、耗时） | [testing/naming.md](testing/naming.md)、[testing/build.md](testing/build.md)、[testing/compare.md](testing/compare.md) | `preprocess_build.py`、`compare_tables.py` |
+| 个人 schema 清理 | [testing/clean.md](testing/clean.md) | `personal_schema_clean.py` |
+| DEV/PROD 线上 build 或部署报错 | [incident/investigation.md](incident/investigation.md) | `deploy.sh` |
 
-## 连接名
+接口的用法、步骤与产物写在各脚本头部的 docstring 或注释里，调用前先读。skill 文档不抄写 model 清单、数据流等随分支变化的结构，需要时用 `layer_flow.py` 从对应 ref 生成。
 
-连接名取值见 `.kiro/local-context.sh` 的 `SNOWFLAKE_CONNECTION`，执行前先读取该文件。所有命令显式带 `-c "$SNOWFLAKE_CONNECTION"`，不依赖默认连接。
+## 所有场景通用
 
-## SQL 查询
+- 连接名取 `.kiro/local-context.sh` 的 `SNOWFLAKE_CONNECTION`，每条 `snow` 命令显式带 `-c "$SNOWFLAKE_CONNECTION"`；脚本经 `scripts/sf.py` 读取同一个值。
+- `snow` 由 `uv tool` 安装，位于 conda 之外，命令前不加 `conda run`。
+- 对象名一律写全限定形式 `<db>.<schema>.<object>`：连接定义里没有 database 与 schema。
+- 写操作只落在个人 schema（`DEV_<USER>`、`DEV_<USER>_PREPROCESS`），跨出时先与用户确认。
+- `config.toml` 的口令、私钥内容与其它取值不复述进回复、仓库、steering、skill。
+- `authenticator = "SNOWFLAKE_JWT"` 报 JWT 无效时，改用口令连接或请有权限者注册公钥，不调参重试。
+- 提交到 Snowflake 的长任务在后台运行，结局由监控 workflow 回报，做法见 `user-run-experiment` skill 的「监控后台任务」；取消查询前先向用户展示完整 query id 并得到确认（`my_queries.sh` 的用法见脚本头部）。
 
-```bash
-snow sql -c "$SNOWFLAKE_CONNECTION" -q "<SQL 语句，对象名写全限定形式 <db>.<schema>.<object>>"
-```
-
-多行 SQL 用文件：
-
-```bash
-snow sql -c "$SNOWFLAKE_CONNECTION" -f <sql文件路径>
-```
-
-## Stage 文件操作
-
-列出 stage 内容：
+单条命令：
 
 ```bash
-snow stage list-files -c "$SNOWFLAKE_CONNECTION" "<db>.<schema>.<stage名>"
+snow sql -c "$SNOWFLAKE_CONNECTION" -q "<SQL>"          # 多行 SQL 用 -f <文件>
+snow stage list-files -c "$SNOWFLAKE_CONNECTION" "@<db>.<schema>.<stage>"
+snow stage copy -c "$SNOWFLAKE_CONNECTION" <本地文件> "@<db>.<schema>.<stage>/<目录>"   # 下载时两个参数对调
 ```
-
-上传文件（跨出个人 `DEV_<name>` schema 的写操作先与用户确认，见 `50-project-facts.md#snowflake`）：
-
-```bash
-snow stage copy -c "$SNOWFLAKE_CONNECTION" <本地文件路径> "@<db>.<schema>.<stage名>"
-```
-
-下载文件：
-
-```bash
-snow stage copy -c "$SNOWFLAKE_CONNECTION" "@<db>.<schema>.<stage名>/<文件名>" <本地目标目录>
-```
-
-## 注意事项
-
-- 禁止给 `snow` 命令加 `conda run` 前缀——`snow` 由 `uv tool` 独立安装，位于 conda 之外。
-- 禁止把 `config.toml` 中的口令、私钥内容或其它取值复述进回复、仓库、steering、skill。
-- 遇到 `authenticator = "SNOWFLAKE_JWT"` 报 JWT 无效，不调参重试，改用口令连接或请有权限者注册公钥。
