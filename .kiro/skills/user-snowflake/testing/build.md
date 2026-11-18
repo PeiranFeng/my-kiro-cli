@@ -26,6 +26,7 @@ dbt build --target personal --select <model>+ --defer --state <manifest 目录> 
 - 每次 build 都读一份上游快照：该层直接 `ref()` 的层外 relation 固定成带 tag 的表（表 clone、view 物化），defer 的 state 改写为指向快照。快照随 tag 保存，供同一 tag 的后续 build 复用。
 - `build <TAG> [--fl <rev>] [--pe <rev>] [--snapshot <id>]`：构建一个版本，把整层输出 clone 成带 tag 与 build id 的表，记录性能（`testing/compare.md` 的性能一节）。只看性能或联调时用它。
 - `verify <TAG> [--base-fl] [--base-pe] [--new-fl] [--new-pe]`：一致性对比，按 `testing/compare.md` 的复用规则选出最少的 build 次数。
+- **`verify` 尚未端到端实测**（截至 2026-11-18，只单独验证过快照的生成、state 改写后的 defer 重定向与兼容判断）：第一次实跑时逐步核对方案选择、两次 build 与比对的结果；跑通且无问题后删除本条，发现问题则修正脚本与本文后再删除。
 - 加 `--background` 后台运行，监控按 `user-run-experiment` skill 的「监控后台任务」：完成正则 `BUILD DONE|VERIFY DONE`，错误正则 `^FAILED:`。
 
 ## 运行中与中断后
