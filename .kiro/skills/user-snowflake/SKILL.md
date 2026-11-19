@@ -39,7 +39,8 @@ description: FeatureLab 数仓（Snowflake + feature-lab dbt）的现状调查�
 - 脚本经 `scripts/sf.py` 读取上表的两个连接名。
 - `snow` 由 `uv tool` 安装，位于 conda 之外，命令前不加 `conda run`。
 - 对象名一律写全限定形式 `<db>.<schema>.<object>`：连接定义里没有 database 与 schema。
-- 写操作只落在个人 schema（`DEV_<USER>` 及其各层 schema），跨出时先与用户确认。DEV 默认只读：手动运行 DEV 任务按 `operations/dev-task.md` 的前置步骤，得到用户明确同意或直接要求后才执行。
+- 写操作只落在个人 schema（`DEV_<USER>` 及其各层 schema），跨出时先与用户确认。
+- 个人 schema 由同一用户的多个任务共用，其中 preprocess 层的 model 表不带 tag、各任务的 build 都写同一组表。部署、build 或手工写入之前先查个人 schema 上是否有其他任务在跑（`scripts/my_queries.sh list` 的在跑查询，以及本地 `~/data/test/snowflake/` 下其他 tag 仍存活的后台进程）；发现有，就停下本任务的写入（不启动、已启动的停掉本任务自己的进程），把对方的 tag、query id 与开始时间告诉用户并询问如何处理，不自行等待、重试或取消对方的查询。DEV 默认只读：手动运行 DEV 任务按 `operations/dev-task.md` 的前置步骤，得到用户明确同意或直接要求后才执行。
 - `config.toml` 的口令、私钥内容与其它取值不复述进回复、仓库、steering、skill。
 - `authenticator = "SNOWFLAKE_JWT"` 报 JWT 无效时，改用口令连接或请有权限者注册公钥，不调参重试。
 - 提交到 Snowflake 的长任务在后台运行，结局由监控 workflow 回报，做法见 `user-run-experiment` skill 的「监控后台任务」；取消查询前先向用户展示完整 query id 并得到确认（`my_queries.sh` 的用法见脚本头部）。

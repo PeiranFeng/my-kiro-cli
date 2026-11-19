@@ -4,7 +4,7 @@
 
 1. **分支与 tag**：确定 `feature-lab` 与 `preprocess_evaluate` 各自要测的分支和 commit，以及 test tag。优先从当前任务推断（正在开发或 review 的分支、PR 的 head 分支、上一次同类运行记录在 `run.json` 里的分支），推断不出再问用户；把推断结果告诉用户并得到确认，再把 `feature-lab` 检出到该分支。
 2. **上游环境**：defer 读 DEV 还是 PROD 的上游（`--upstream`）。验证未合并的改动默认 DEV。
-3. **warehouse 与在跑的查询**：同一目标仍有 `RUNNING` 的查询时不启动新的 build（`scripts/my_queries.sh list`）。
+3. **其他任务**：个人 schema 上有其他任务在跑时按 `SKILL.md`「所有场景通用」的规定停下并询问用户；`preprocess_build.py` 因当前用户有在跑查询而拒绝启动时同样处理。
 
 ## 通用 build：defer 只读上游
 
