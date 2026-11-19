@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Reply self-check before sending",
+      "trigger": "UserPromptSubmit",
+      "description": "On every user prompt, inject a three-item check against appended side topics, offloaded decisions, and wording that makes correct or neutral states look defective.",
+      "action": {
+        "type": "agent",
+        "prompt": "发出回复前逐条检查：\n1. 每一句都要能对应到用户本轮的要求，或者是理解答案所必需的前提。对应不上的删掉，尤其是结尾附加的后续事项。\n2. 凡是写了“要不要”“是否需要”“你定”“你决定”的句子：如果做这个决定所需的信息我都有，就直接给出结论和理由。只有三种情况才问用户，而且只问那一项：结论取决于用户偏好；按规则必须由用户确认（远程操作、写入范围）；缺少我无法获得的信息。\n3. 凡是用“还”“仍”“没有”“未”描述现状的句子：先确认它是否真的指向一个会造成错误后果的缺陷。不是的话，改成中性陈述，或者删掉。"
+      }
+    }
+  ]
+}
