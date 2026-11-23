@@ -20,7 +20,11 @@ steering 与 skill 只记录"看代码看不出来但必须知道"的内容。�
 
 ### 语言要求  {#language}
 
-所有回复只能使用中文或英文，禁止其他语言。上传到 GitHub 的文字一律使用英文，包括 commit message、issue 描述、PR 标题和描述、PR comments。
+所有回复只能使用中文或英文，禁止其他语言。上传到 GitHub 的文字使用英文，包括 commit message、PR comments；issue 和 PR 的标题使用英文，正文内容使用中文。
+
+### 时间用北京时间  {#beijing-time}
+
+向用户汇报的一切时间（创建时间、更新时间、运行时刻、时间范围等）一律换算为北京时间（UTC+8）。
 
 ### 需求文档用肯定式  {#affirmative-docs}
 
