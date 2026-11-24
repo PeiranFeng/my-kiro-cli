@@ -2,7 +2,6 @@
 
 `principles/` 各文件里的规则所依据的文献与公开实践。条目的验证情况：文献指已读取该链接的内容，二手指只读到他人的摘要或转述，未核实指仅凭模型内部知识。核实日期 2026-11-23。
 
-
 ## 防御与失败方式
 
 ### 契约式设计
@@ -113,7 +112,7 @@
 - 每个 import 与外部调用核实实际安装的版本（guard-skills）。采纳于 `principles/data-contract.md`。
 - 未实现时显式失败，不返回占位成功值，不改测试求通过（guard-skills）。采纳于 `principles/failure.md` 与 `principles/testing.md`。
 - 清理类改动保持行为不变，包括错误类型；无测试时只报告（code-humanizer）。采纳于 `principles/repo-conventions.md`。
-- 豁免规则：信任边界的校验、有书面理由的兜底、仓库既有约定、声明为探索的代码（code-humanizer、boring-engineering）。采纳于 `interfaces/review.md`。
+- 豁免规则：信任边界的校验、有书面理由的兜底、仓库既有约定、声明为探索的代码（code-humanizer、boring-engineering）。采纳于 `interfaces/code-review.md`。
 - 无效测试：只断言 mock、字面量断言、场景重复（code-humanizer）。采纳于 `principles/testing.md`。
 
 ### 没有采纳
