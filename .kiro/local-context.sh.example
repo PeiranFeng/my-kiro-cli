@@ -20,3 +20,6 @@ SNOWFLAKE_CONNECTION_DEV_OP=<your-dev-op-connection-name>
 SNOWFLAKE_ACCOUNT=<your-snowflake-account-identifier>
 SNOWFLAKE_USER=<your-snowflake-username>
 SNOWFLAKE_PASSWORD=<your-snowflake-password>
+
+# user-vibe-code develop 接口的临时开发 clone 所在目录
+DEV_CLONE_ROOT=<your-dev-clone-root>

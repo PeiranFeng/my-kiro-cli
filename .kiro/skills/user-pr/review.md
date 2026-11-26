@@ -39,5 +39,6 @@ gh pr diff <number> --repo FinAI-Project/<repo>
 
 ## 边界
 
+- 需求与方案是否成立由 requirement 接口负责，本接口只审代码。
 - 不发评论、不提交 review。
 - 要查看已有的 review 意见时，用 comments 接口。

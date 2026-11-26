@@ -4,7 +4,7 @@
 
 ## 库的登记
 
-`deploy.sh` 按库登记打包命令、存储过程定义与 dbt 变量，已登记的库及各自的打包入口见脚本头部。新增一个库（如 `feature_lab_weight`）时，先核对该库的打包脚本、`feature-lab` 中引用它的 `imports` 与变量名，以及该库的上传 CI，再在脚本里加一个分支；命名、构建、清理接口不需改动。
+`deploy.sh` 按库登记打包命令、存储过程定义与 dbt 变量，已登记的库及各自的打包入口见脚本头部。新增一个库时，先核对该库的打包脚本、`feature-lab` 中引用它的 `imports` 与变量名，以及该库的上传 CI，再在脚本里加一个分支；命名、构建、清理接口不需改动。
 
 ### evaluator_snowflake
 
@@ -15,7 +15,7 @@
 ## 规则
 
 - 官方包与个人包严格区分：官方包由 `preprocess_evaluate` 的 CI 在 push 到 `main`/`develop` 时上传到共享路径（`50-project-facts.md#preprocess-evaluate-stage`），禁止手动上传；个人包只放个人 `PYTHON_STAGE`，路径带 tag 与 commit 短 hash，与官方的 `current/` 路径分开。
-- 每个 commit 一个存储过程，名字带 tag 与 hash，不覆盖已有的 `PREPROCESS_FACTORS`，避免不同 commit 的结果混在同一个名字下。
-- `deploy.sh` 的存储过程模板仍是含 `DATE_START` 的 7 参数签名，preprocess_evaluate#89 合并后即过时，届时同步改为 6 参数。
+- 每个 commit 的每个 handler 一个存储过程，名字带 tag 与 hash，不覆盖已有的 `PREPROCESS_FACTORS`，避免不同 commit 的结果混在同一个名字下。
+- `deploy.sh` 按被部署 commit 的 `snowflake_preprocess.py` 里 `mart_handler`、`mapping_handler` 的形参生成存储过程签名；有 `mapping_handler` 的 commit 另建 `PREPROCESS_FACTOR_MAPPING_<TAG>_<HASH>`，并经 `preprocess_mapping_procedure` 传给 dbt。
 - 存储过程的 `PACKAGES` 跟随官方模板 `orchestration/create_preprocess_procedure.sql`；该库依赖版本变化时核对它的 `pyproject.toml` 并同步 `deploy.sh`。
 - 判断某个 zip 对应哪个 commit，下载后与 `git archive <commit>` 的内容逐文件比对，不看文件名或时间（`knowledge/verified-facts.md` 的 Stage 一节）。
